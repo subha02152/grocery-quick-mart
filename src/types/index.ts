@@ -1,6 +1,14 @@
-export interface Shop {
+// types.ts
+
+// Base interface for common MongoDB fields
+interface BaseEntity {
   id: string;
-  _id?: string;
+  _id?: string; // MongoDB ID
+  createdAt: string; // ISO string
+  updatedAt: string; // ISO string
+}
+
+export interface Shop extends BaseEntity {
   name: string;
   description?: string;
   address: string;
@@ -14,13 +22,14 @@ export interface Shop {
   logo?: string;
   rating?: number;
   totalReviews?: number;
-  createdAt: string;
-  updatedAt: string;
+  location?: {
+    latitude: number;
+    longitude: number;
+  };
+  deliveryRadius?: number; // in km
 }
 
-export interface Product {
-  id: string;
-  _id?: string;
+export interface Product extends BaseEntity {
   name: string;
   description?: string;
   price: number;
@@ -41,32 +50,8 @@ export interface Product {
   };
   expiryDate?: string;
   discount?: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface Order {
-  id: string;
-  _id?: string;
-  orderNumber: string;
-  customerId: string;
-  customerName: string;
-  customerPhone: string;
-  customerEmail?: string;
-  shopId: string;
-  items: OrderItem[];
-  totalAmount: number;
-  deliveryAddress: string;
-  status: 'pending' | 'confirmed' | 'packed' | 'dispatched' | 'delivered' | 'cancelled';
-  paymentStatus?: 'pending' | 'paid' | 'failed' | 'refunded';
-  paymentMethod?: 'cash' | 'card' | 'upi' | 'wallet';
-  deliveryInstructions?: string;
-  expectedDelivery?: string;
-  deliveryAgentId?: string;
-  rating?: number;
-  review?: string;
-  createdAt: string;
-  updatedAt: string;
+  minOrder?: number;
+  maxOrder?: number;
 }
 
 export interface OrderItem {
@@ -76,6 +61,68 @@ export interface OrderItem {
   quantity: number;
   unit: string;
   image?: string;
+  total: number; // price * quantity
+}
+
+// Use string literals for better TypeScript support
+export type OrderStatus = 
+  | 'pending' 
+  | 'confirmed' 
+  | 'preparing' 
+  | 'ready' 
+  | 'dispatched' 
+  | 'out_for_delivery' 
+  | 'delivered' 
+  | 'cancelled';
+
+export type PaymentStatus = 
+  | 'pending' 
+  | 'paid' 
+  | 'failed' 
+  | 'refunded' 
+  | 'partially_refunded';
+
+export type PaymentMethod = 
+  | 'cash' 
+  | 'card' 
+  | 'upi' 
+  | 'wallet' 
+  | 'net_banking';
+
+export interface Order extends BaseEntity {
+  orderNumber: string;
+  customerId: string;
+  customerName: string;
+  customerPhone: string;
+  customerEmail?: string;
+  shopId: string;
+  shopName?: string; // Denormalized for performance
+  items: OrderItem[];
+  subtotal: number; // Items total before fees
+  deliveryFee: number;
+  taxAmount?: number;
+  discountAmount?: number;
+  totalAmount: number;
+  deliveryAddress: string;
+  deliveryCoordinates?: {
+    latitude: number;
+    longitude: number;
+  };
+  status: OrderStatus;
+  paymentStatus: PaymentStatus;
+  paymentMethod?: PaymentMethod;
+  paymentId?: string;
+  deliveryInstructions?: string;
+  expectedDelivery?: string;
+  assignedAt?: string;
+  pickedUpAt?: string;
+  deliveredAt?: string;
+  deliveryAgentId?: string;
+  deliveryAgentName?: string;
+  rating?: number;
+  review?: string;
+  cancellationReason?: string;
+  preparedAt?: string;
 }
 
 export interface CartItem {
@@ -86,17 +133,57 @@ export interface CartItem {
   quantity: number;
   unit: string;
   imageUrl?: string;
+  maxOrder?: number;
+  isAvailable?: boolean;
+  total: number; // price * quantity
 }
 
-export interface User {
-  id: string;
-  _id?: string;
+export type UserRole = 'customer' | 'shop_owner' | 'delivery_agent' | 'admin';
+
+export interface User extends BaseEntity {
   name: string;
   email: string;
   phone: string;
   address: string;
-  role: 'customer' | 'shop_owner' | 'delivery_agent';
+  role: UserRole;
   isActive: boolean;
+  isEmailVerified?: boolean;
+  isPhoneVerified?: boolean;
+  avatar?: string;
+  
+  // Delivery agent specific fields
+  vehicleType?: string;
+  vehicleNumber?: string;
+  licenseNumber?: string;
+  isOnline?: boolean;
+  currentLocation?: {
+    latitude: number;
+    longitude: number;
+  };
+  
+  // Shop owner specific fields
+  shopId?: string;
+}
+
+export interface DeliveryAgent {
+  id: string;
+  _id?: string;
+  userId: string;
+  name: string;
+  phone: string;
+  email: string;
+  vehicleType: string;
+  vehicleNumber: string;
+  licenseNumber: string;
+  isOnline: boolean;
+  isAvailable: boolean;
+  currentLocation?: {
+    latitude: number;
+    longitude: number;
+  };
+  rating?: number;
+  totalDeliveries?: number;
+  completedDeliveries?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -106,4 +193,27 @@ export interface ApiResponse<T = any> {
   message?: string;
   data?: T;
   error?: string;
+  statusCode?: number;
+  pagination?: {
+    page: number;
+    limit: number;
+    total: number;
+    pages: number;
+  };
+}
+
+// Specific response types for better type safety
+export interface OrdersResponse {
+  orders: Order[];
+  pagination?: ApiResponse['pagination'];
+}
+
+export interface ProductsResponse {
+  products: Product[];
+  pagination?: ApiResponse['pagination'];
+}
+
+export interface ShopsResponse {
+  shops: Shop[];
+  pagination?: ApiResponse['pagination'];
 }

@@ -1,48 +1,56 @@
+import { useState, useEffect } from 'react';
 import { Package, MapPin, Phone, Clock } from 'lucide-react';
 import { Order } from '../../types';
 import { toast } from '../../utils/toast';
+import { deliveryAPI } from '../../utils/api';
+import Loading from '../shared/Loading';
 
 const AssignedDeliveries = () => {
-  // Hardcoded deliveries - NO API CALLS
-  const deliveries: Order[] = [
-    {
-      id: '1',
-      orderNumber: 'ORD-001',
-      customerName: 'John Doe',
-      customerPhone: '+1 (555) 123-4567',
-      deliveryAddress: '123 Main Street, City Center',
-      totalAmount: 25.97,
-      items: [
-        { name: 'Apples', quantity: 2, price: 2.99, unit: 'kg' },
-        { name: 'Bananas', quantity: 1, price: 1.49, unit: 'dozen' },
-        { name: 'Bread', quantity: 1, price: 3.99, unit: 'pack' }
-      ],
-      createdAt: '2024-01-17T10:30:00Z',
-      updatedAt: '2024-01-17T10:30:00Z',
-      status: 'dispatched'
-    },
-    {
-      id: '2',
-      orderNumber: 'ORD-003',
-      customerName: 'Jane Smith',
-      customerPhone: '+1 (555) 987-6543',
-      deliveryAddress: '456 Oak Avenue, Downtown',
-      totalAmount: 32.50,
-      items: [
-        { name: 'Potatoes', quantity: 3, price: 1.99, unit: 'kg' },
-        { name: 'Apples', quantity: 1, price: 2.99, unit: 'kg' },
-        { name: 'Milk', quantity: 2, price: 2.49, unit: 'liter' }
-      ],
-      createdAt: '2024-01-17T11:15:00Z',
-      updatedAt: '2024-01-17T11:15:00Z',
-      status: 'dispatched'
-    }
-  ];
+  const [deliveries, setDeliveries] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const updateDeliveryStatus = (orderId: string, status: string) => {
-    toast.success(`Delivery marked as ${status}`);
-    alert(`Order ${orderId} marked as ${status}`);
+  useEffect(() => {
+    fetchAssignedDeliveries();
+  }, []);
+
+  const fetchAssignedDeliveries = async () => {
+    setLoading(true);
+    try {
+      const response = await deliveryAPI.getAssignedOrders();
+      if (response.success) {
+        setDeliveries(response.data.orders);
+        console.log('✅ Loaded assigned deliveries:', response.data.orders.length);
+      } else {
+        toast.error('Failed to load assigned deliveries');
+      }
+    } catch (error) {
+      console.error('Error fetching assigned deliveries:', error);
+      toast.error('Failed to load assigned deliveries');
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const updateDeliveryStatus = async (orderId: string) => {
+    try {
+      const response = await deliveryAPI.markAsDelivered(orderId);
+      if (response.success) {
+        toast.success('Order marked as delivered!');
+        // Remove from assigned deliveries
+        setDeliveries(deliveries.filter(delivery => delivery.id !== orderId));
+        console.log('✅ Order marked as delivered:', orderId);
+      } else {
+        toast.error('Failed to update delivery status');
+      }
+    } catch (error) {
+      console.error('Error updating delivery status:', error);
+      toast.error('Failed to update delivery status');
+    }
+  };
+
+  if (loading) {
+    return <Loading message="Loading assigned deliveries..." />;
+  }
 
   if (deliveries.length === 0) {
     return (
@@ -60,21 +68,21 @@ const AssignedDeliveries = () => {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-6">Assigned Deliveries</h2>
+      <h2 className="text-2xl font-bold mb-6">Assigned Deliveries ({deliveries.length})</h2>
 
       <div className="space-y-4">
         {deliveries.map((order) => (
           <div
             key={order.id}
-            className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition"
+            className="border border-orange-200 rounded-lg p-6 bg-orange-50 hover:shadow-md transition"
           >
             <div className="flex items-start justify-between mb-4">
               <div>
                 <div className="flex items-center space-x-2 mb-2">
                   <span className="font-semibold text-gray-900">
-                    Delivery #{order.orderNumber}
+                    Order #{order.orderNumber}
                   </span>
-                  <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
+                  <span className="px-3 py-1 bg-orange-100 text-orange-800 rounded-full text-xs font-medium">
                     Dispatched
                   </span>
                 </div>
@@ -90,13 +98,13 @@ const AssignedDeliveries = () => {
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-2xl font-bold text-green-600">
+                <p className="text-2xl font-bold text-orange-600">
                   ₹{order.totalAmount.toFixed(2)}
                 </p>
               </div>
             </div>
 
-            <div className="border-t pt-4 mb-4">
+            <div className="border-t border-orange-200 pt-4 mb-4">
               <h4 className="font-semibold mb-2 flex items-center">
                 <Package className="h-4 w-4 mr-2" />
                 Items:
@@ -105,7 +113,7 @@ const AssignedDeliveries = () => {
                 {order.items.map((item, index) => (
                   <div
                     key={index}
-                    className="flex justify-between text-sm text-gray-700 bg-gray-50 p-2 rounded"
+                    className="flex justify-between text-sm text-gray-700 bg-white p-2 rounded"
                   >
                     <span>
                       {item.name} x {item.quantity} {item.unit}
@@ -118,7 +126,7 @@ const AssignedDeliveries = () => {
               </div>
             </div>
 
-            <div className="border-t pt-4 mb-4 space-y-2">
+            <div className="border-t border-orange-200 pt-4 mb-4 space-y-2">
               <div className="flex items-start text-sm">
                 <MapPin className="h-4 w-4 text-gray-500 mr-2 mt-0.5 flex-shrink-0" />
                 <div>
@@ -140,11 +148,15 @@ const AssignedDeliveries = () => {
                   </a>
                 </div>
               </div>
+              <div className="flex items-center text-sm">
+                <span className="font-medium text-gray-700">Shop:</span>{' '}
+                <span className="text-gray-600 ml-2">{order.shopName}</span>
+              </div>
             </div>
 
             <button
-              onClick={() => updateDeliveryStatus(order.id, 'delivered')}
-              className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition font-semibold"
+              onClick={() => updateDeliveryStatus(order.id)}
+              className="w-full bg-orange-600 text-white py-3 rounded-lg hover:bg-orange-700 transition font-semibold"
             >
               Mark as Delivered
             </button>

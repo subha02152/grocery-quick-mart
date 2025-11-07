@@ -135,9 +135,6 @@ const orderSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// ORDER NUMBER WILL BE GENERATED MANUALLY IN THE ROUTE
-// Removed pre-save middleware to fix validation error
-
 const Order = mongoose.model('Order', orderSchema);
 
 // FIXED Auth middleware - creates real user instead of fake ID
@@ -199,6 +196,39 @@ const protectShopOwner = async (req, res, next) => {
     
     next();
   } catch (error) {
+    return res.status(401).json({
+      success: false,
+      message: 'Not authorized'
+    });
+  }
+};
+
+// Delivery agent protect middleware
+const protectDeliveryAgent = async (req, res, next) => {
+  try {
+    // For delivery agents, create/find a real user
+    let user = await User.findOne({ email: 'delivery@example.com' });
+    
+    if (!user) {
+      const hashedPassword = await bcrypt.hash('password123', 12);
+      user = await User.create({
+        name: 'Delivery Agent',
+        email: 'delivery@example.com',
+        password: hashedPassword,
+        phone: '+1234567890',
+        address: '123 Delivery Street, City',
+        role: 'delivery_agent'
+      });
+    }
+    
+    req.user = { 
+      id: user._id,
+      role: user.role
+    };
+    
+    next();
+  } catch (error) {
+    console.error('Delivery agent auth error:', error);
     return res.status(401).json({
       success: false,
       message: 'Not authorized'
@@ -309,7 +339,7 @@ app.get('/api/customer/shops/:shopId/products', async (req, res) => {
   }
 });
 
-// FIXED: Create order route - completely working now
+// Create order route
 app.post('/api/customer/orders', protect, async (req, res) => {
   try {
     console.log('📦 Creating order with data:', req.body);
@@ -331,7 +361,7 @@ app.post('/api/customer/orders', protect, async (req, res) => {
       });
     }
 
-    // Get user details - NOW USING REAL USER FROM DATABASE
+    // Get user details
     const user = await User.findById(req.user.id);
     if (!user) {
       return res.status(404).json({
@@ -359,15 +389,14 @@ app.post('/api/customer/orders', protect, async (req, res) => {
 
     console.log('✅ All validations passed, creating order...');
 
-    // Generate order number MANUALLY before creating order
-    const orderCount = await Order.countDocuments();
-    const orderNumber = `ORD-${Date.now()}`; // Simple unique order number
+    // Generate order number
+    const orderNumber = `ORD-${Date.now()}`;
     console.log(`🔢 Generated order number: ${orderNumber}`);
 
-    // Create order - WITH MANUAL ORDER NUMBER
+    // Create order
     const order = new Order({
-      orderNumber: orderNumber, // MANUALLY SET
-      customerId: user._id, // REAL user ID from database
+      orderNumber: orderNumber,
+      customerId: user._id,
       customerName: user.name,
       customerPhone: user.phone,
       customerEmail: user.email,
@@ -400,7 +429,7 @@ app.post('/api/customer/orders', protect, async (req, res) => {
       customerPhone: order.customerPhone,
       customerEmail: order.customerEmail,
       shopId: order.shopId.toString(),
-      shopName: shop.name, // Include shop name
+      shopName: shop.name,
       items: order.items.map(item => ({
         productId: item.productId.toString(),
         name: item.name,
@@ -461,7 +490,7 @@ app.get('/api/customer/orders', protect, async (req, res) => {
       customerPhone: order.customerPhone,
       customerEmail: order.customerEmail,
       shopId: order.shopId._id.toString(),
-      shopName: order.shopId.name, // Shop owner name included
+      shopName: order.shopId.name,
       items: order.items.map(item => ({
         productId: item.productId.toString(),
         name: item.name,
@@ -505,7 +534,7 @@ app.post('/api/auth/register', async (req, res) => {
 
     console.log('📝 Registration attempt:', { name, email, role });
 
-    // Check if user already exists in MongoDB
+    // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({
@@ -517,7 +546,7 @@ app.post('/api/auth/register', async (req, res) => {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Create new user in MongoDB
+    // Create new user
     const newUser = await User.create({
       name,
       email,
@@ -568,7 +597,7 @@ app.post('/api/auth/login', async (req, res) => {
 
     console.log('🔐 Login attempt:', { email });
 
-    // Check if user exists in MongoDB
+    // Check if user exists
     const user = await User.findOne({ email });
     
     if (!user) {
@@ -578,7 +607,7 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
 
-    // Check if password matches (using bcrypt)
+    // Check password
     const isPasswordValid = await bcrypt.compare(password, user.password);
     
     if (!isPasswordValid) {
@@ -640,7 +669,6 @@ app.get('/api/shops', protectShopOwner, async (req, res) => {
       });
     }
 
-    // Convert to frontend format
     const formattedShop = {
       id: shop._id.toString(),
       _id: shop._id.toString(),
@@ -683,7 +711,6 @@ app.post('/api/shops', protectShopOwner, async (req, res) => {
     let shop = await Shop.findOne({ ownerId: req.user.id });
 
     if (shop) {
-      // Update existing shop
       shop = await Shop.findByIdAndUpdate(
         shop._id,
         {
@@ -699,7 +726,6 @@ app.post('/api/shops', protectShopOwner, async (req, res) => {
         { new: true, runValidators: true }
       );
     } else {
-      // Create new shop
       shop = await Shop.create({
         name,
         description,
@@ -712,7 +738,6 @@ app.post('/api/shops', protectShopOwner, async (req, res) => {
       });
     }
 
-    // Convert to frontend format
     const formattedShop = {
       id: shop._id.toString(),
       _id: shop._id.toString(),
@@ -783,7 +808,6 @@ app.get('/api/shops/stats', protectShopOwner, async (req, res) => {
       status: { $in: ['pending', 'confirmed', 'packed'] } 
     });
     
-    // Calculate total revenue
     const revenueResult = await Order.aggregate([
       { $match: { shopId: shop._id, status: 'delivered' } },
       { $group: { _id: null, total: { $sum: '$totalAmount' } } }
@@ -811,7 +835,10 @@ app.get('/api/shops/stats', protectShopOwner, async (req, res) => {
   }
 });
 
-// Product routes for shop owners
+// ========================
+// PRODUCT ROUTES
+// ========================
+
 app.get('/api/products', protectShopOwner, async (req, res) => {
   try {
     const shop = await Shop.findOne({ ownerId: req.user.id });
@@ -830,7 +857,6 @@ app.get('/api/products', protectShopOwner, async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
-    // Convert to frontend format
     const formattedProducts = products.map(product => ({
       id: product._id.toString(),
       _id: product._id.toString(),
@@ -883,7 +909,6 @@ app.post('/api/products', protectShopOwner, async (req, res) => {
       shopId: shop._id
     });
 
-    // Convert to frontend format
     const formattedProduct = {
       id: product._id.toString(),
       _id: product._id.toString(),
@@ -954,7 +979,6 @@ app.put('/api/products/:id', protectShopOwner, async (req, res) => {
       });
     }
 
-    // Convert to frontend format
     const formattedProduct = {
       id: product._id.toString(),
       _id: product._id.toString(),
@@ -1025,7 +1049,10 @@ app.delete('/api/products/:id', protectShopOwner, async (req, res) => {
   }
 });
 
-// Order routes for shop owners
+// ========================
+// ORDER ROUTES (Shop Owner)
+// ========================
+
 app.get('/api/orders', protectShopOwner, async (req, res) => {
   try {
     const shop = await Shop.findOne({ ownerId: req.user.id });
@@ -1052,7 +1079,6 @@ app.get('/api/orders', protectShopOwner, async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
-    // Convert to frontend format
     const formattedOrders = orders.map(order => ({
       id: order._id.toString(),
       _id: order._id.toString(),
@@ -1122,7 +1148,6 @@ app.put('/api/orders/:id/status', protectShopOwner, async (req, res) => {
       });
     }
 
-    // Convert to frontend format
     const formattedOrder = {
       id: order._id.toString(),
       _id: order._id.toString(),
@@ -1215,10 +1240,209 @@ app.get('/api/orders/stats', protectShopOwner, async (req, res) => {
 });
 
 // ========================
+// DELIVERY AGENT ROUTES - FIXED
+// ========================
+
+// Get assigned deliveries (dispatched orders)
+app.get('/api/delivery/assigned-orders', protectDeliveryAgent, async (req, res) => {
+  try {
+    console.log('📦 Fetching assigned orders from MongoDB...');
+    
+    const orders = await Order.find({ 
+      status: 'dispatched'
+    })
+    .populate('shopId', 'name phone address')
+    .populate('customerId', 'name email phone')
+    .sort({ createdAt: -1 })
+    .lean();
+
+    console.log(`✅ Found ${orders.length} dispatched orders`);
+
+    const formattedOrders = orders.map(order => ({
+      id: order._id.toString(),
+      _id: order._id.toString(),
+      orderNumber: order.orderNumber,
+      customerId: order.customerId._id.toString(),
+      customerName: order.customerName,
+      customerPhone: order.customerPhone,
+      customerEmail: order.customerEmail,
+      deliveryAddress: order.deliveryAddress,
+      shopId: order.shopId._id.toString(),
+      shopName: order.shopId.name, // ✅ FIXED: shopName now included
+      items: order.items.map(item => ({
+        productId: item.productId.toString(),
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+        unit: item.unit,
+        image: item.image || ''
+      })),
+      totalAmount: order.totalAmount,
+      status: order.status,
+      paymentStatus: order.paymentStatus,
+      paymentMethod: order.paymentMethod,
+      createdAt: order.createdAt.toISOString(),
+      updatedAt: order.updatedAt.toISOString()
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: {
+        orders: formattedOrders,
+        count: formattedOrders.length
+      }
+    });
+  } catch (error) {
+    console.error('❌ Get assigned orders error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching assigned orders: ' + error.message
+    });
+  }
+});
+
+// Get completed deliveries (delivered orders)
+app.get('/api/delivery/completed-orders', protectDeliveryAgent, async (req, res) => {
+  try {
+    console.log('📦 Fetching completed orders from MongoDB...');
+    
+    const orders = await Order.find({ 
+      status: 'delivered'
+    })
+    .populate('shopId', 'name phone address')
+    .populate('customerId', 'name email phone')
+    .sort({ updatedAt: -1 })
+    .lean();
+
+    console.log(`✅ Found ${orders.length} delivered orders`);
+
+    const formattedOrders = orders.map(order => ({
+      id: order._id.toString(),
+      _id: order._id.toString(),
+      orderNumber: order.orderNumber,
+      customerId: order.customerId._id.toString(),
+      customerName: order.customerName,
+      customerPhone: order.customerPhone,
+      customerEmail: order.customerEmail,
+      deliveryAddress: order.deliveryAddress,
+      shopId: order.shopId._id.toString(),
+      shopName: order.shopId.name, // ✅ FIXED: shopName now included
+      items: order.items.map(item => ({
+        productId: item.productId.toString(),
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+        unit: item.unit,
+        image: item.image || ''
+      })),
+      totalAmount: order.totalAmount,
+      status: order.status,
+      paymentStatus: order.paymentStatus,
+      paymentMethod: order.paymentMethod,
+      createdAt: order.createdAt.toISOString(),
+      updatedAt: order.updatedAt.toISOString()
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: {
+        orders: formattedOrders,
+        count: formattedOrders.length
+      }
+    });
+  } catch (error) {
+    console.error('❌ Get completed orders error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching completed orders: ' + error.message
+    });
+  }
+});
+
+// Mark order as delivered
+app.put('/api/delivery/orders/:id/deliver', protectDeliveryAgent, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    console.log(`📦 Marking order ${id} as delivered...`);
+
+    // Validate order ID
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid order ID'
+      });
+    }
+
+    const order = await Order.findByIdAndUpdate(
+      id,
+      { 
+        status: 'delivered',
+        paymentStatus: 'paid', // Mark payment as paid when delivered
+        updatedAt: new Date()
+      },
+      { new: true }
+    )
+    .populate('shopId', 'name phone address')
+    .populate('customerId', 'name email phone');
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    console.log(`✅ Order ${order.orderNumber} marked as delivered`);
+
+    const formattedOrder = {
+      id: order._id.toString(),
+      _id: order._id.toString(),
+      orderNumber: order.orderNumber,
+      customerId: order.customerId._id.toString(),
+      customerName: order.customerName,
+      customerPhone: order.customerPhone,
+      customerEmail: order.customerEmail,
+      deliveryAddress: order.deliveryAddress,
+      shopId: order.shopId._id.toString(),
+      shopName: order.shopId.name,
+      items: order.items.map(item => ({
+        productId: item.productId.toString(),
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+        unit: item.unit,
+        image: item.image || ''
+      })),
+      totalAmount: order.totalAmount,
+      status: order.status,
+      paymentStatus: order.paymentStatus,
+      paymentMethod: order.paymentMethod,
+      createdAt: order.createdAt.toISOString(),
+      updatedAt: order.updatedAt.toISOString()
+    };
+
+    res.status(200).json({
+      success: true,
+      message: 'Order marked as delivered successfully!',
+      data: {
+        order: formattedOrder
+      }
+    });
+  } catch (error) {
+    console.error('❌ Update order status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating order status: ' + error.message
+    });
+  }
+});
+
+// ========================
 // UTILITY ROUTES
 // ========================
 
-// Health check route
+// Health check
 app.get('/api/health', (req, res) => {
   res.status(200).json({ 
     status: 'OK', 
@@ -1227,12 +1451,11 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Get all users (for testing)
+// Get all users
 app.get('/api/users', async (req, res) => {
   try {
-    const users = await User.find({}, { password: 0 }).lean(); // Exclude passwords
+    const users = await User.find({}, { password: 0 }).lean();
 
-    // Convert to frontend format
     const formattedUsers = users.map(user => ({
       id: user._id.toString(),
       _id: user._id.toString(),
@@ -1264,7 +1487,6 @@ app.get('/api/users', async (req, res) => {
 // Initialize sample data
 app.post('/api/init-data', async (req, res) => {
   try {
-    // Create sample shop owner
     const shopOwner = await User.findOne({ email: 'shop@example.com' });
     let ownerId;
 
@@ -1283,7 +1505,6 @@ app.post('/api/init-data', async (req, res) => {
       ownerId = shopOwner._id;
     }
 
-    // Create sample shops
     const sampleShops = [
       {
         name: 'Fresh Grocery Store',
@@ -1314,7 +1535,6 @@ app.post('/api/init-data', async (req, res) => {
       if (!shop) {
         shop = await Shop.create(shopData);
         
-        // Create sample products for this shop
         const sampleProducts = [
           {
             name: 'Fresh Apples',
@@ -1393,7 +1613,6 @@ const connectDB = async () => {
     await mongoose.connect(process.env.MONGODB_URI);
     console.log('✅ MongoDB connected successfully');
     
-    // Test: List all collections
     const collections = await mongoose.connection.db.listCollections().toArray();
     console.log('📁 Database collections:', collections.map(c => c.name));
     
@@ -1418,8 +1637,8 @@ const startServer = async () => {
       console.log(`📦 Product routes: http://localhost:${PORT}/api/products`);
       console.log(`📋 Order routes: http://localhost:${PORT}/api/orders`);
       console.log(`🔐 Auth routes: http://localhost:${PORT}/api/auth`);
+      console.log(`🚚 Delivery routes: http://localhost:${PORT}/api/delivery`);
       console.log(`🎯 Initialize sample data: POST http://localhost:${PORT}/api/init-data`);
-      console.log(`🛒 Customer Orders POST: http://localhost:${PORT}/api/customer/orders`);
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error.message);

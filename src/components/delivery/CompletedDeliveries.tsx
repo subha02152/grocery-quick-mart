@@ -1,41 +1,35 @@
+import { useState, useEffect } from 'react';
 import { Package, CheckCircle, Clock } from 'lucide-react';
 import { Order } from '../../types';
+import { deliveryAPI } from '../../utils/api';
+import Loading from '../shared/Loading';
 
 const CompletedDeliveries = () => {
-  // Hardcoded deliveries - NO API CALLS
-  const deliveries: Order[] = [
-    {
-      id: '3',
-      orderNumber: 'ORD-002',
-      customerName: 'Mike Johnson',
-      customerPhone: '+1 (555) 456-7890',
-      deliveryAddress: '789 Green Road, Westside',
-      totalAmount: 18.49,
-      items: [
-        { name: 'Milk', quantity: 2, price: 2.49, unit: 'liter' },
-        { name: 'Eggs', quantity: 1, price: 4.99, unit: 'dozen' }
-      ],
-      createdAt: '2024-01-16T09:15:00Z',
-      updatedAt: '2024-01-16T15:00:00Z',
-      status: 'delivered'
-    },
-    {
-      id: '4',
-      orderNumber: 'ORD-004',
-      customerName: 'Sarah Wilson',
-      customerPhone: '+1 (555) 111-2222',
-      deliveryAddress: '321 Pine Street, Northside',
-      totalAmount: 42.75,
-      items: [
-        { name: 'Apples', quantity: 3, price: 2.99, unit: 'kg' },
-        { name: 'Bread', quantity: 2, price: 3.99, unit: 'pack' },
-        { name: 'Potatoes', quantity: 2, price: 1.99, unit: 'kg' }
-      ],
-      createdAt: '2024-01-15T14:20:00Z',
-      updatedAt: '2024-01-15T18:45:00Z',
-      status: 'delivered'
+  const [deliveries, setDeliveries] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchCompletedDeliveries();
+  }, []);
+
+  const fetchCompletedDeliveries = async () => {
+    setLoading(true);
+    try {
+      const response = await deliveryAPI.getCompletedOrders();
+      if (response.success) {
+        setDeliveries(response.data.orders);
+        console.log('✅ Loaded completed deliveries:', response.data.orders.length);
+      }
+    } catch (error) {
+      console.error('Error fetching completed deliveries:', error);
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
+
+  if (loading) {
+    return <Loading message="Loading completed deliveries..." />;
+  }
 
   if (deliveries.length === 0) {
     return (
@@ -53,19 +47,19 @@ const CompletedDeliveries = () => {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-6">Completed Deliveries</h2>
+      <h2 className="text-2xl font-bold mb-6">Completed Deliveries ({deliveries.length})</h2>
 
       <div className="space-y-4">
         {deliveries.map((order) => (
           <div
             key={order.id}
-            className="border border-gray-200 rounded-lg p-6 bg-green-50"
+            className="border border-green-200 rounded-lg p-6 bg-green-50 hover:shadow-md transition"
           >
             <div className="flex items-start justify-between mb-4">
               <div>
                 <div className="flex items-center space-x-2 mb-2">
                   <span className="font-semibold text-gray-900">
-                    Delivery #{order.orderNumber}
+                    Order #{order.orderNumber}
                   </span>
                   <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium flex items-center">
                     <CheckCircle className="h-3 w-3 mr-1" />
@@ -112,10 +106,18 @@ const CompletedDeliveries = () => {
               </div>
             </div>
 
-            <div className="border-t border-green-200 mt-4 pt-4 text-sm text-gray-600">
+            <div className="border-t border-green-200 mt-4 pt-4 text-sm text-gray-600 space-y-1">
               <p>
                 <span className="font-medium">Delivered to:</span>{' '}
                 {order.deliveryAddress}
+              </p>
+              <p>
+                <span className="font-medium">Customer:</span>{' '}
+                {order.customerName} ({order.customerPhone})
+              </p>
+              <p>
+                <span className="font-medium">Shop:</span>{' '}
+                {(order as any).shopName ?? 'Unknown Shop'}
               </p>
             </div>
           </div>
