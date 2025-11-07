@@ -1,38 +1,30 @@
 import { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Package } from 'lucide-react';
-import { Product, Shop } from '../../types';
+import { Product } from '../../types';
 import { toast } from '../../utils/toast';
 import ProductForm from './ProductForm';
-import { productAPI } from '../../utils/api';
+import { productAPI, shopAPI } from '../../utils/api';
 
 const ProductManagement = () => {
-  const [shop, setShop] = useState<Shop | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    fetchShopAndProducts();
+    fetchProducts();
   }, []);
 
-  const fetchShopAndProducts = async () => {
+  const fetchProducts = async () => {
     try {
       setLoading(true);
-      const [shopResponse, productsResponse] = await Promise.all([
-        productAPI.getShop(),
-        productAPI.getProducts()
-      ]);
-
-      if (shopResponse.success) {
-        setShop(shopResponse.data.shop);
-      }
-
-      if (productsResponse.success) {
-        setProducts(productsResponse.data.products);
+      const response = await productAPI.getProducts();
+      
+      if (response.success) {
+        setProducts(response.data.products);
       }
     } catch (error: any) {
-      console.error('Fetch error:', error);
+      console.error('Fetch products error:', error);
     } finally {
       setLoading(false);
     }
@@ -63,27 +55,12 @@ const ProductManagement = () => {
   const handleFormClose = () => {
     setShowForm(false);
     setEditingProduct(null);
-    fetchShopAndProducts(); // Refresh products after form close
+    fetchProducts(); // Refresh products after form close
   };
-
-  if (!shop) {
-    return (
-      <div className="text-center py-12">
-        <Package className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-        <h3 className="text-xl font-semibold text-gray-700 mb-2">
-          Shop Required
-        </h3>
-        <p className="text-gray-500 mb-6">
-          Please create a shop first to manage products
-        </p>
-      </div>
-    );
-  }
 
   if (showForm) {
     return (
       <ProductForm
-        shop={shop}
         product={editingProduct}
         onClose={handleFormClose}
       />
@@ -132,7 +109,7 @@ const ProductManagement = () => {
               className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition"
             >
               <div className="bg-gray-100 h-48 flex items-center justify-center">
-                {product.images && product.images.length > 0 ? (
+                {product.images && product.images.length > 0 && product.images[0] ? (
                   <img
                     src={product.images[0]}
                     alt={product.name}
