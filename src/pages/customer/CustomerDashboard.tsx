@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Store, Package, ShoppingCart } from 'lucide-react';
-import api from '../../utils/api';
+import { customerAPI } from '../../utils/api';
 import { Shop } from '../../types';
 import { toast } from '../../utils/toast';
 import Loading from '../../components/shared/Loading';
@@ -16,6 +16,29 @@ const CustomerDashboard = () => {
   const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
   const [cartItems, setCartItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [shops, setShops] = useState<Shop[]>([]);
+
+  // Fetch shops from MongoDB
+  useEffect(() => {
+    const fetchShops = async () => {
+      setLoading(true);
+      try {
+        const response = await customerAPI.getShops();
+        if (response.success) {
+          setShops(response.data.shops);
+        }
+      } catch (error) {
+        console.error('Error fetching shops:', error);
+        toast.error('Failed to load shops');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (currentView === 'shops') {
+      fetchShops();
+    }
+  }, [currentView]);
 
   const handleShopSelect = (shop: Shop) => {
     setSelectedShop(shop);
@@ -36,6 +59,10 @@ const CustomerDashboard = () => {
   };
 
   const cartItemCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+
+  if (loading) {
+    return <Loading fullScreen message="Loading shops..." />;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -91,7 +118,13 @@ const CustomerDashboard = () => {
         </div>
 
         <div className="bg-white rounded-lg shadow-md p-6">
-          {currentView === 'shops' && <ShopList onSelectShop={handleShopSelect} />}
+          {currentView === 'shops' && (
+            <ShopList 
+              shops={shops} 
+              onSelectShop={handleShopSelect} 
+              loading={loading}
+            />
+          )}
           {currentView === 'products' && selectedShop && (
             <ProductList
               shop={selectedShop}

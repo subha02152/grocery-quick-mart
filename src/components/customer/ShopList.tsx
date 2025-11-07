@@ -1,50 +1,34 @@
 import { Store, MapPin, Phone } from 'lucide-react';
 import { Shop } from '../../types';
+import Loading from '../shared/Loading';
 
 interface ShopListProps {
+  shops: Shop[];
   onSelectShop: (shop: Shop) => void;
+  loading: boolean;
 }
 
-const ShopList = ({ onSelectShop }: ShopListProps) => {
-  // Hardcoded shops - NO API CALLS
-  const shops: Shop[] = [
-    {
-      id: '1',
-      name: 'Fresh Grocery Store',
-      description: 'Your neighborhood fresh grocery store with fresh produce and daily essentials',
-      address: '123 Main Street, City Center',
-      phone: '+1 (555) 123-4567',
-      ownerId: '1',
-      isActive: true,
-      isOpen: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    },
-    {
-      id: '2', 
-      name: 'Quick Mart',
-      description: 'Fast and convenient shopping for all your grocery needs',
-      address: '456 Oak Avenue, Downtown',
-      phone: '+1 (555) 987-6543',
-      ownerId: '2',
-      isActive: true,
-      isOpen: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    },
-    {
-      id: '3',
-      name: 'Organic Market',
-      description: '100% organic products and healthy food options',
-      address: '789 Green Road, Westside',
-      phone: '+1 (555) 456-7890',
-      ownerId: '3',
-      isActive: true,
-      isOpen: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    }
-  ];
+const ShopList = ({ shops, onSelectShop, loading }: ShopListProps) => {
+  if (loading) {
+    return <Loading message="Loading shops..." />;
+  }
+
+  if (shops.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <Store className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+        <h3 className="text-xl font-semibold text-gray-700 mb-2">
+          No shops available
+        </h3>
+        <p className="text-gray-500 mb-4">
+          There are no active shops in your area at the moment.
+        </p>
+        <p className="text-sm text-gray-400">
+          Make sure to initialize sample data from the server.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -52,7 +36,7 @@ const ShopList = ({ onSelectShop }: ShopListProps) => {
       <div className="grid md:grid-cols-2 gap-6">
         {shops.map((shop) => (
           <div
-            key={shop.id}
+            key={shop._id || shop.id}
             className="border border-gray-200 rounded-lg p-6 hover:shadow-lg transition cursor-pointer"
             onClick={() => onSelectShop(shop)}
           >

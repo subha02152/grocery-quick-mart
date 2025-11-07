@@ -12,12 +12,34 @@ export interface User {
   updatedAt?: string;
 }
 
+// Safe localStorage operations
+const safeLocalStorage = {
+  setItem: (key: string, value: string): void => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(key, value);
+    }
+  },
+  
+  getItem: (key: string): string | null => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem(key);
+    }
+    return null;
+  },
+  
+  removeItem: (key: string): void => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(key);
+    }
+  }
+};
+
 export const setAuthToken = (token: string): void => {
-  localStorage.setItem('token', token);
+  safeLocalStorage.setItem('token', token);
 };
 
 export const getAuthToken = (): string | null => {
-  return localStorage.getItem('token');
+  return safeLocalStorage.getItem('token');
 };
 
 export const setUser = (user: User): void => {
@@ -26,11 +48,11 @@ export const setUser = (user: User): void => {
     ...user,
     id: user._id || user.id
   };
-  localStorage.setItem('user', JSON.stringify(userWithId));
+  safeLocalStorage.setItem('user', JSON.stringify(userWithId));
 };
 
 export const getUser = (): User | null => {
-  const userStr = localStorage.getItem('user');
+  const userStr = safeLocalStorage.getItem('user');
   if (userStr) {
     try {
       return JSON.parse(userStr);
@@ -42,8 +64,13 @@ export const getUser = (): User | null => {
 };
 
 export const logout = (): void => {
-  localStorage.removeItem('token');
-  localStorage.removeItem('user');
+  safeLocalStorage.removeItem('token');
+  safeLocalStorage.removeItem('user');
+  
+  // Redirect to login page if in browser environment
+  if (typeof window !== 'undefined') {
+    window.location.href = '/login';
+  }
 };
 
 export const isAuthenticated = (): boolean => {
@@ -57,4 +84,16 @@ export const getCurrentUser = (): User | null => {
 export const hasRole = (role: string): boolean => {
   const user = getUser();
   return user ? user.role === role : false;
+};
+
+// Check if user has any of the specified roles
+export const hasAnyRole = (roles: string[]): boolean => {
+  const user = getUser();
+  return user ? roles.includes(user.role) : false;
+};
+
+// Get user ID safely
+export const getUserId = (): string | null => {
+  const user = getUser();
+  return user ? (user._id || user.id) : null;
 };

@@ -21,7 +21,7 @@ app.use(helmet());
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100
+  max: 1000
 });
 app.use(limiter);
 
@@ -43,8 +43,9 @@ const userSchema = new mongoose.Schema({
   phone: { type: String, required: true },
   address: { type: String, required: true },
   role: { type: String, enum: ['customer', 'shop_owner', 'delivery_agent'], default: 'customer' },
-  isActive: { type: Boolean, default: true },
-  createdAt: { type: Date, default: Date.now }
+  isActive: { type: Boolean, default: true }
+}, {
+  timestamps: true
 });
 
 const User = mongoose.model('User', userSchema);
@@ -134,9 +135,18 @@ const orderSchema = new mongoose.Schema({
   timestamps: true
 });
 
+// Pre-save middleware to generate order number
+orderSchema.pre('save', async function(next) {
+  if (this.isNew) {
+    const count = await mongoose.model('Order').countDocuments();
+    this.orderNumber = `ORD-${(count + 1).toString().padStart(6, '0')}`;
+  }
+  next();
+});
+
 const Order = mongoose.model('Order', orderSchema);
 
-// FIXED: Auth middleware - Use valid MongoDB ObjectId
+// Auth middleware
 const protect = async (req, res, next) => {
   try {
     let token;
@@ -152,9 +162,48 @@ const protect = async (req, res, next) => {
       });
     }
 
-    // FIXED: Use valid MongoDB ObjectId instead of "mock-user-id"
+    // For demo purposes - in real app, verify JWT token
+    // This allows both authenticated and unauthenticated access to customer routes
+    try {
+      // Try to get user from token
+      // For now, we'll use a mock user for customers
+      req.user = { 
+        id: new mongoose.Types.ObjectId('65a1b2c3d4e5f6a7b8c9d0e1'),
+        role: 'customer'
+      };
+    } catch (error) {
+      // If token is invalid, still allow access but with limited functionality
+      req.user = null;
+    }
+    
+    next();
+  } catch (error) {
+    return res.status(401).json({
+      success: false,
+      message: 'Not authorized'
+    });
+  }
+};
+
+// Shop owner protect middleware
+const protectShopOwner = async (req, res, next) => {
+  try {
+    let token;
+
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+      token = req.headers.authorization.split(' ')[1];
+    }
+
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: 'Not authorized'
+      });
+    }
+
+    // For shop owners, require valid user
     req.user = { 
-      id: new mongoose.Types.ObjectId('65a1b2c3d4e5f6a7b8c9d0e1') // Valid ObjectId
+      id: new mongoose.Types.ObjectId('65a1b2c3d4e5f6a7b8c9d0e1')
     };
     
     next();
@@ -166,7 +215,267 @@ const protect = async (req, res, next) => {
   }
 };
 
-// Auth routes
+// ========================
+// CUSTOMER ROUTES (Public)
+// ========================
+
+// Get all active shops
+app.get('/api/customer/shops', async (req, res) => {
+  try {
+    const shops = await Shop.find({ isActive: true })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // Convert to frontend format
+    const formattedShops = shops.map(shop => ({
+      id: shop._id.toString(),
+      _id: shop._id.toString(),
+      name: shop.name,
+      description: shop.description,
+      address: shop.address,
+      phone: shop.phone,
+      email: shop.email,
+      ownerId: shop.ownerId.toString(),
+      isActive: shop.isActive,
+      isOpen: shop.isOpen,
+      openingHours: shop.openingHours,
+      categories: shop.categories || [],
+      logo: shop.logo,
+      rating: shop.rating,
+      totalReviews: shop.totalReviews,
+      createdAt: shop.createdAt.toISOString(),
+      updatedAt: shop.updatedAt.toISOString()
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: {
+        shops: formattedShops,
+        count: formattedShops.length
+      }
+    });
+  } catch (error) {
+    console.error('Get customer shops error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching shops'
+    });
+  }
+});
+
+// Get products for a specific shop
+app.get('/api/customer/shops/:shopId/products', async (req, res) => {
+  try {
+    const { shopId } = req.params;
+    
+    // Validate shopId
+    if (!mongoose.Types.ObjectId.isValid(shopId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid shop ID'
+      });
+    }
+
+    const products = await Product.find({ 
+      shopId, 
+      isAvailable: true
+    }).sort({ createdAt: -1 }).lean();
+
+    // Convert to frontend format
+    const formattedProducts = products.map(product => ({
+      id: product._id.toString(),
+      _id: product._id.toString(),
+      name: product.name,
+      description: product.description,
+      price: product.price,
+      originalPrice: product.originalPrice,
+      unit: product.unit,
+      stock: product.stock,
+      category: product.category,
+      images: product.images || [],
+      isAvailable: product.isAvailable,
+      isFeatured: product.isFeatured || false,
+      shopId: product.shopId.toString(),
+      tags: product.tags || [],
+      discount: product.discount || 0,
+      createdAt: product.createdAt.toISOString(),
+      updatedAt: product.updatedAt.toISOString()
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: {
+        products: formattedProducts,
+        count: formattedProducts.length
+      }
+    });
+  } catch (error) {
+    console.error('Get shop products error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching products'
+    });
+  }
+});
+
+// Create order
+app.post('/api/customer/orders', protect, async (req, res) => {
+  try {
+    const { shopId, items, totalAmount, deliveryAddress, paymentMethod } = req.body;
+
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Please login to place order'
+      });
+    }
+
+    // Get user details
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Validate shop
+    const shop = await Shop.findById(shopId);
+    if (!shop) {
+      return res.status(404).json({
+        success: false,
+        message: 'Shop not found'
+      });
+    }
+
+    // Create order
+    const order = await Order.create({
+      customerId: user._id,
+      customerName: user.name,
+      customerPhone: user.phone,
+      customerEmail: user.email,
+      shopId: shop._id,
+      items: items.map(item => ({
+        productId: item.productId,
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+        unit: item.unit,
+        image: item.image
+      })),
+      totalAmount,
+      deliveryAddress: deliveryAddress || user.address,
+      paymentMethod: paymentMethod || 'cash',
+      status: 'pending',
+      paymentStatus: 'pending'
+    });
+
+    // Convert to frontend format
+    const formattedOrder = {
+      id: order._id.toString(),
+      _id: order._id.toString(),
+      orderNumber: order.orderNumber,
+      customerId: order.customerId.toString(),
+      customerName: order.customerName,
+      customerPhone: order.customerPhone,
+      customerEmail: order.customerEmail,
+      shopId: order.shopId.toString(),
+      items: order.items.map(item => ({
+        productId: item.productId.toString(),
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+        unit: item.unit,
+        image: item.image
+      })),
+      totalAmount: order.totalAmount,
+      deliveryAddress: order.deliveryAddress,
+      status: order.status,
+      paymentStatus: order.paymentStatus,
+      paymentMethod: order.paymentMethod,
+      createdAt: order.createdAt.toISOString(),
+      updatedAt: order.updatedAt.toISOString()
+    };
+
+    res.status(201).json({
+      success: true,
+      message: 'Order placed successfully!',
+      data: {
+        order: formattedOrder
+      }
+    });
+  } catch (error) {
+    console.error('Create order error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error placing order'
+    });
+  }
+});
+
+// Get customer orders
+app.get('/api/customer/orders', protect, async (req, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Please login to view orders'
+      });
+    }
+
+    const orders = await Order.find({ customerId: req.user.id })
+      .populate('shopId', 'name phone address')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // Convert to frontend format
+    const formattedOrders = orders.map(order => ({
+      id: order._id.toString(),
+      _id: order._id.toString(),
+      orderNumber: order.orderNumber,
+      customerId: order.customerId.toString(),
+      customerName: order.customerName,
+      customerPhone: order.customerPhone,
+      customerEmail: order.customerEmail,
+      shopId: order.shopId._id.toString(),
+      shopName: order.shopId.name,
+      items: order.items.map(item => ({
+        productId: item.productId.toString(),
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+        unit: item.unit,
+        image: item.image
+      })),
+      totalAmount: order.totalAmount,
+      deliveryAddress: order.deliveryAddress,
+      status: order.status,
+      paymentStatus: order.paymentStatus,
+      paymentMethod: order.paymentMethod,
+      createdAt: order.createdAt.toISOString(),
+      updatedAt: order.updatedAt.toISOString()
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: {
+        orders: formattedOrders,
+        count: formattedOrders.length
+      }
+    });
+  } catch (error) {
+    console.error('Get customer orders error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching orders'
+    });
+  }
+});
+
+// ========================
+// AUTH ROUTES
+// ========================
+
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { name, email, password, phone, address, role } = req.body;
@@ -196,8 +505,18 @@ app.post('/api/auth/register', async (req, res) => {
     });
 
     // Remove password from response
-    const userResponse = { ...newUser.toObject() };
-    delete userResponse.password;
+    const userResponse = { 
+      id: newUser._id.toString(),
+      _id: newUser._id.toString(),
+      name: newUser.name,
+      email: newUser.email,
+      phone: newUser.phone,
+      address: newUser.address,
+      role: newUser.role,
+      isActive: newUser.isActive,
+      createdAt: newUser.createdAt.toISOString(),
+      updatedAt: newUser.updatedAt.toISOString()
+    };
 
     // Mock token
     const token = 'jwt-token-' + Date.now();
@@ -247,8 +566,18 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     // Remove password from response
-    const userResponse = { ...user.toObject() };
-    delete userResponse.password;
+    const userResponse = { 
+      id: user._id.toString(),
+      _id: user._id.toString(),
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      address: user.address,
+      role: user.role,
+      isActive: user.isActive,
+      createdAt: user.createdAt.toISOString(),
+      updatedAt: user.updatedAt.toISOString()
+    };
 
     // Mock token
     const token = 'jwt-token-' + Date.now();
@@ -271,16 +600,48 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// FIXED: Shop routes - Return null instead of 404 when no shop found
-app.get('/api/shops', protect, async (req, res) => {
+// ========================
+// SHOP OWNER ROUTES
+// ========================
+
+app.get('/api/shops', protectShopOwner, async (req, res) => {
   try {
     const shop = await Shop.findOne({ ownerId: req.user.id });
     
-    // FIXED: Return shop or null, don't throw 404 error
+    if (!shop) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          shop: null
+        }
+      });
+    }
+
+    // Convert to frontend format
+    const formattedShop = {
+      id: shop._id.toString(),
+      _id: shop._id.toString(),
+      name: shop.name,
+      description: shop.description,
+      address: shop.address,
+      phone: shop.phone,
+      email: shop.email,
+      ownerId: shop.ownerId.toString(),
+      isActive: shop.isActive,
+      isOpen: shop.isOpen,
+      openingHours: shop.openingHours,
+      categories: shop.categories || [],
+      logo: shop.logo,
+      rating: shop.rating,
+      totalReviews: shop.totalReviews,
+      createdAt: shop.createdAt.toISOString(),
+      updatedAt: shop.updatedAt.toISOString()
+    };
+
     res.status(200).json({
       success: true,
       data: {
-        shop: shop || null
+        shop: formattedShop
       }
     });
   } catch (error) {
@@ -292,7 +653,7 @@ app.get('/api/shops', protect, async (req, res) => {
   }
 });
 
-app.post('/api/shops', protect, async (req, res) => {
+app.post('/api/shops', protectShopOwner, async (req, res) => {
   try {
     const { name, description, address, phone, email, isOpen, openingHours } = req.body;
     
@@ -328,11 +689,32 @@ app.post('/api/shops', protect, async (req, res) => {
       });
     }
 
+    // Convert to frontend format
+    const formattedShop = {
+      id: shop._id.toString(),
+      _id: shop._id.toString(),
+      name: shop.name,
+      description: shop.description,
+      address: shop.address,
+      phone: shop.phone,
+      email: shop.email,
+      ownerId: shop.ownerId.toString(),
+      isActive: shop.isActive,
+      isOpen: shop.isOpen,
+      openingHours: shop.openingHours,
+      categories: shop.categories || [],
+      logo: shop.logo,
+      rating: shop.rating,
+      totalReviews: shop.totalReviews,
+      createdAt: shop.createdAt.toISOString(),
+      updatedAt: shop.updatedAt.toISOString()
+    };
+
     res.status(200).json({
       success: true,
       message: shop.isNew ? 'Shop created successfully!' : 'Shop updated successfully!',
       data: {
-        shop
+        shop: formattedShop
       }
     });
   } catch (error) {
@@ -353,7 +735,7 @@ app.post('/api/shops', protect, async (req, res) => {
   }
 });
 
-app.get('/api/shops/stats', protect, async (req, res) => {
+app.get('/api/shops/stats', protectShopOwner, async (req, res) => {
   try {
     const shop = await Shop.findOne({ ownerId: req.user.id });
     
@@ -406,8 +788,8 @@ app.get('/api/shops/stats', protect, async (req, res) => {
   }
 });
 
-// FIXED: Product routes - Return empty array instead of 404
-app.get('/api/products', protect, async (req, res) => {
+// Product routes for shop owners
+app.get('/api/products', protectShopOwner, async (req, res) => {
   try {
     const shop = await Shop.findOne({ ownerId: req.user.id });
     
@@ -422,13 +804,35 @@ app.get('/api/products', protect, async (req, res) => {
     }
 
     const products = await Product.find({ shopId: shop._id })
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // Convert to frontend format
+    const formattedProducts = products.map(product => ({
+      id: product._id.toString(),
+      _id: product._id.toString(),
+      name: product.name,
+      description: product.description,
+      price: product.price,
+      originalPrice: product.originalPrice,
+      unit: product.unit,
+      stock: product.stock,
+      category: product.category,
+      images: product.images || [],
+      isAvailable: product.isAvailable,
+      isFeatured: product.isFeatured || false,
+      shopId: product.shopId.toString(),
+      tags: product.tags || [],
+      discount: product.discount || 0,
+      createdAt: product.createdAt.toISOString(),
+      updatedAt: product.updatedAt.toISOString()
+    }));
 
     res.status(200).json({
       success: true,
       data: {
-        products,
-        count: products.length
+        products: formattedProducts,
+        count: formattedProducts.length
       }
     });
   } catch (error) {
@@ -440,7 +844,7 @@ app.get('/api/products', protect, async (req, res) => {
   }
 });
 
-app.post('/api/products', protect, async (req, res) => {
+app.post('/api/products', protectShopOwner, async (req, res) => {
   try {
     const shop = await Shop.findOne({ ownerId: req.user.id });
     
@@ -456,11 +860,32 @@ app.post('/api/products', protect, async (req, res) => {
       shopId: shop._id
     });
 
+    // Convert to frontend format
+    const formattedProduct = {
+      id: product._id.toString(),
+      _id: product._id.toString(),
+      name: product.name,
+      description: product.description,
+      price: product.price,
+      originalPrice: product.originalPrice,
+      unit: product.unit,
+      stock: product.stock,
+      category: product.category,
+      images: product.images || [],
+      isAvailable: product.isAvailable,
+      isFeatured: product.isFeatured || false,
+      shopId: product.shopId.toString(),
+      tags: product.tags || [],
+      discount: product.discount || 0,
+      createdAt: product.createdAt.toISOString(),
+      updatedAt: product.updatedAt.toISOString()
+    };
+
     res.status(201).json({
       success: true,
       message: 'Product created successfully!',
       data: {
-        product
+        product: formattedProduct
       }
     });
   } catch (error) {
@@ -481,7 +906,7 @@ app.post('/api/products', protect, async (req, res) => {
   }
 });
 
-app.put('/api/products/:id', protect, async (req, res) => {
+app.put('/api/products/:id', protectShopOwner, async (req, res) => {
   try {
     const { id } = req.params;
     const shop = await Shop.findOne({ ownerId: req.user.id });
@@ -506,11 +931,32 @@ app.put('/api/products/:id', protect, async (req, res) => {
       });
     }
 
+    // Convert to frontend format
+    const formattedProduct = {
+      id: product._id.toString(),
+      _id: product._id.toString(),
+      name: product.name,
+      description: product.description,
+      price: product.price,
+      originalPrice: product.originalPrice,
+      unit: product.unit,
+      stock: product.stock,
+      category: product.category,
+      images: product.images || [],
+      isAvailable: product.isAvailable,
+      isFeatured: product.isFeatured || false,
+      shopId: product.shopId.toString(),
+      tags: product.tags || [],
+      discount: product.discount || 0,
+      createdAt: product.createdAt.toISOString(),
+      updatedAt: product.updatedAt.toISOString()
+    };
+
     res.status(200).json({
       success: true,
       message: 'Product updated successfully!',
       data: {
-        product
+        product: formattedProduct
       }
     });
   } catch (error) {
@@ -522,7 +968,7 @@ app.put('/api/products/:id', protect, async (req, res) => {
   }
 });
 
-app.delete('/api/products/:id', protect, async (req, res) => {
+app.delete('/api/products/:id', protectShopOwner, async (req, res) => {
   try {
     const { id } = req.params;
     const shop = await Shop.findOne({ ownerId: req.user.id });
@@ -556,8 +1002,8 @@ app.delete('/api/products/:id', protect, async (req, res) => {
   }
 });
 
-// FIXED: Order routes - Return empty array instead of 404
-app.get('/api/orders', protect, async (req, res) => {
+// Order routes for shop owners
+app.get('/api/orders', protectShopOwner, async (req, res) => {
   try {
     const shop = await Shop.findOne({ ownerId: req.user.id });
     
@@ -579,13 +1025,42 @@ app.get('/api/orders', protect, async (req, res) => {
     }
 
     const orders = await Order.find(filter)
-      .sort({ createdAt: -1 });
+      .populate('customerId', 'name email phone')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // Convert to frontend format
+    const formattedOrders = orders.map(order => ({
+      id: order._id.toString(),
+      _id: order._id.toString(),
+      orderNumber: order.orderNumber,
+      customerId: order.customerId._id.toString(),
+      customerName: order.customerId.name,
+      customerPhone: order.customerId.phone,
+      customerEmail: order.customerId.email,
+      shopId: order.shopId.toString(),
+      items: order.items.map(item => ({
+        productId: item.productId.toString(),
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+        unit: item.unit,
+        image: item.image
+      })),
+      totalAmount: order.totalAmount,
+      deliveryAddress: order.deliveryAddress,
+      status: order.status,
+      paymentStatus: order.paymentStatus,
+      paymentMethod: order.paymentMethod,
+      createdAt: order.createdAt.toISOString(),
+      updatedAt: order.updatedAt.toISOString()
+    }));
 
     res.status(200).json({
       success: true,
       data: {
-        orders,
-        count: orders.length
+        orders: formattedOrders,
+        count: formattedOrders.length
       }
     });
   } catch (error) {
@@ -597,7 +1072,7 @@ app.get('/api/orders', protect, async (req, res) => {
   }
 });
 
-app.put('/api/orders/:id/status', protect, async (req, res) => {
+app.put('/api/orders/:id/status', protectShopOwner, async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
@@ -615,7 +1090,7 @@ app.put('/api/orders/:id/status', protect, async (req, res) => {
       { _id: id, shopId: shop._id },
       { status, updatedAt: new Date() },
       { new: true }
-    );
+    ).populate('customerId', 'name email phone');
 
     if (!order) {
       return res.status(404).json({
@@ -624,11 +1099,38 @@ app.put('/api/orders/:id/status', protect, async (req, res) => {
       });
     }
 
+    // Convert to frontend format
+    const formattedOrder = {
+      id: order._id.toString(),
+      _id: order._id.toString(),
+      orderNumber: order.orderNumber,
+      customerId: order.customerId._id.toString(),
+      customerName: order.customerId.name,
+      customerPhone: order.customerId.phone,
+      customerEmail: order.customerId.email,
+      shopId: order.shopId.toString(),
+      items: order.items.map(item => ({
+        productId: item.productId.toString(),
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+        unit: item.unit,
+        image: item.image
+      })),
+      totalAmount: order.totalAmount,
+      deliveryAddress: order.deliveryAddress,
+      status: order.status,
+      paymentStatus: order.paymentStatus,
+      paymentMethod: order.paymentMethod,
+      createdAt: order.createdAt.toISOString(),
+      updatedAt: order.updatedAt.toISOString()
+    };
+
     res.status(200).json({
       success: true,
       message: `Order status updated to ${status}`,
       data: {
-        order
+        order: formattedOrder
       }
     });
   } catch (error) {
@@ -640,7 +1142,7 @@ app.put('/api/orders/:id/status', protect, async (req, res) => {
   }
 });
 
-app.get('/api/orders/stats', protect, async (req, res) => {
+app.get('/api/orders/stats', protectShopOwner, async (req, res) => {
   try {
     const shop = await Shop.findOne({ ownerId: req.user.id });
     
@@ -689,6 +1191,10 @@ app.get('/api/orders/stats', protect, async (req, res) => {
   }
 });
 
+// ========================
+// UTILITY ROUTES
+// ========================
+
 // Health check route
 app.get('/api/health', (req, res) => {
   res.status(200).json({ 
@@ -701,18 +1207,137 @@ app.get('/api/health', (req, res) => {
 // Get all users (for testing)
 app.get('/api/users', async (req, res) => {
   try {
-    const users = await User.find({}, { password: 0 }); // Exclude passwords
+    const users = await User.find({}, { password: 0 }).lean(); // Exclude passwords
+
+    // Convert to frontend format
+    const formattedUsers = users.map(user => ({
+      id: user._id.toString(),
+      _id: user._id.toString(),
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      address: user.address,
+      role: user.role,
+      isActive: user.isActive,
+      createdAt: user.createdAt.toISOString(),
+      updatedAt: user.updatedAt.toISOString()
+    }));
+
     res.json({
       success: true,
       data: {
-        users,
-        count: users.length
+        users: formattedUsers,
+        count: formattedUsers.length
       }
     });
   } catch (error) {
     res.status(500).json({
       success: false,
       message: 'Error fetching users'
+    });
+  }
+});
+
+// Initialize sample data
+app.post('/api/init-data', async (req, res) => {
+  try {
+    // Create sample shop owner
+    const shopOwner = await User.findOne({ email: 'shop@example.com' });
+    let ownerId;
+
+    if (!shopOwner) {
+      const hashedPassword = await bcrypt.hash('password123', 12);
+      const newOwner = await User.create({
+        name: 'Shop Owner',
+        email: 'shop@example.com',
+        password: hashedPassword,
+        phone: '+1234567890',
+        address: '123 Shop Street, City',
+        role: 'shop_owner'
+      });
+      ownerId = newOwner._id;
+    } else {
+      ownerId = shopOwner._id;
+    }
+
+    // Create sample shops
+    const sampleShops = [
+      {
+        name: 'Fresh Grocery Store',
+        description: 'Your neighborhood fresh grocery store with fresh produce and daily essentials',
+        address: '123 Main Street, City Center',
+        phone: '+1 (555) 123-4567',
+        email: 'fresh@example.com',
+        ownerId: ownerId,
+        isActive: true,
+        isOpen: true,
+        categories: ['Fruits', 'Vegetables', 'Dairy']
+      },
+      {
+        name: 'Quick Mart',
+        description: 'Fast and convenient shopping for all your grocery needs',
+        address: '456 Oak Avenue, Downtown',
+        phone: '+1 (555) 987-6543',
+        email: 'quick@example.com',
+        ownerId: ownerId,
+        isActive: true,
+        isOpen: true,
+        categories: ['Bakery', 'Snacks', 'Beverages']
+      }
+    ];
+
+    for (const shopData of sampleShops) {
+      let shop = await Shop.findOne({ name: shopData.name });
+      if (!shop) {
+        shop = await Shop.create(shopData);
+        
+        // Create sample products for this shop
+        const sampleProducts = [
+          {
+            name: 'Fresh Apples',
+            description: 'Sweet and crunchy red apples, perfect for snacks',
+            price: 2.99,
+            unit: 'kg',
+            stock: 50,
+            category: 'Fruits',
+            shopId: shop._id,
+            isAvailable: true
+          },
+          {
+            name: 'Bananas',
+            description: 'Fresh yellow bananas, rich in potassium',
+            price: 1.49,
+            unit: 'dozen',
+            stock: 30,
+            category: 'Fruits',
+            shopId: shop._id,
+            isAvailable: true
+          },
+          {
+            name: 'Whole Wheat Bread',
+            description: 'Healthy whole wheat bread, freshly baked',
+            price: 3.99,
+            unit: 'pack',
+            stock: 20,
+            category: 'Bakery',
+            shopId: shop._id,
+            isAvailable: true
+          }
+        ];
+
+        await Product.insertMany(sampleProducts);
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Sample data initialized successfully!'
+    });
+  } catch (error) {
+    console.error('Init data error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error initializing sample data'
     });
   }
 });
@@ -765,9 +1390,12 @@ const startServer = async () => {
     app.listen(PORT, () => {
       console.log(`✅ Server running on port ${PORT}`);
       console.log(`🌐 Health check: http://localhost:${PORT}/api/health`);
-      console.log(`🛍️ Shop routes: http://localhost:${PORT}/api/shops`);
+      console.log(`🛍️ Customer routes: http://localhost:${PORT}/api/customer/shops`);
+      console.log(`🏪 Shop owner routes: http://localhost:${PORT}/api/shops`);
       console.log(`📦 Product routes: http://localhost:${PORT}/api/products`);
       console.log(`📋 Order routes: http://localhost:${PORT}/api/orders`);
+      console.log(`🔐 Auth routes: http://localhost:${PORT}/api/auth`);
+      console.log(`🎯 Initialize sample data: POST http://localhost:${PORT}/api/init-data`);
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error.message);

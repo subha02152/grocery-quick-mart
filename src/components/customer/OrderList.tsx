@@ -1,52 +1,30 @@
+import { useState, useEffect } from 'react';
 import { Package, Clock, CheckCircle, XCircle, Truck } from 'lucide-react';
 import { Order } from '../../types';
+import { customerAPI } from '../../utils/api';
+import Loading from '../shared/Loading';
 
 const OrderList = () => {
-  // Hardcoded orders - NO API CALLS
-  const orders: Order[] = [
-    {
-      id: '1',
-      orderNumber: 'ORD-001',
-      status: 'delivered',
-      totalAmount: 25.97,
-      items: [
-        { name: 'Apples', quantity: 2, price: 2.99, unit: 'kg' },
-        { name: 'Bananas', quantity: 1, price: 1.49, unit: 'dozen' },
-        { name: 'Bread', quantity: 1, price: 3.99, unit: 'pack' }
-      ],
-      deliveryAddress: '123 Main Street, City Center',
-      customerPhone: '+1 (555) 123-4567',
-      createdAt: '2024-01-15T10:30:00Z',
-      deliveredAt: '2024-01-15T14:45:00Z'
-    },
-    {
-      id: '2',
-      orderNumber: 'ORD-002', 
-      status: 'processing',
-      totalAmount: 18.49,
-      items: [
-        { name: 'Milk', quantity: 2, price: 2.49, unit: 'liter' },
-        { name: 'Eggs', quantity: 1, price: 4.99, unit: 'dozen' }
-      ],
-      deliveryAddress: '456 Oak Avenue, Downtown',
-      customerPhone: '+1 (555) 987-6543',
-      createdAt: '2024-01-16T09:15:00Z'
-    },
-    {
-      id: '3',
-      orderNumber: 'ORD-003',
-      status: 'dispatched',
-      totalAmount: 32.50,
-      items: [
-        { name: 'Potatoes', quantity: 3, price: 1.99, unit: 'kg' },
-        { name: 'Apples', quantity: 1, price: 2.99, unit: 'kg' },
-        { name: 'Milk', quantity: 2, price: 2.49, unit: 'liter' }
-      ],
-      deliveryAddress: '789 Green Road, Westside',
-      customerPhone: '+1 (555) 456-7890',
-      createdAt: '2024-01-17T11:20:00Z'
-    }
-  ];
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchOrders = async () => {
+      setLoading(true);
+      try {
+        const response = await customerAPI.getCustomerOrders();
+        if (response.success) {
+          setOrders(response.data.orders);
+        }
+      } catch (error) {
+        console.error('Error fetching orders:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchOrders();
+  }, []);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -78,6 +56,10 @@ const OrderList = () => {
     }
   };
 
+  if (loading) {
+    return <Loading message="Loading orders..." />;
+  }
+
   if (orders.length === 0) {
     return (
       <div className="text-center py-12">
@@ -99,7 +81,7 @@ const OrderList = () => {
       <div className="space-y-4">
         {orders.map((order) => (
           <div
-            key={order.id}
+            key={order._id || order.id}
             className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition"
           >
             <div className="flex items-start justify-between mb-4">

@@ -77,3 +77,33 @@ export interface OrderItem {
   unit: string;
   image?: string;
 }
+
+export interface CartItem {
+  productId: string;
+  shopId: string;
+  name: string;
+  price: number;
+  quantity: number;
+  unit: string;
+  imageUrl?: string;
+}
+
+export interface User {
+  id: string;
+  _id?: string;
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+  role: 'customer' | 'shop_owner' | 'delivery_agent';
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApiResponse<T = any> {
+  success: boolean;
+  message?: string;
+  data?: T;
+  error?: string;
+}

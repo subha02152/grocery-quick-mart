@@ -3,6 +3,8 @@ import { ShoppingCart, Trash2, Plus, Minus } from 'lucide-react';
 import { CartItem } from '../../types';
 import { toast } from '../../utils/toast';
 import { getUser } from '../../utils/auth';
+import { customerAPI } from '../../utils/api';
+import Loading from '../shared/Loading';
 
 interface CartProps {
   cartItems: CartItem[];
@@ -46,13 +48,35 @@ const Cart = ({ cartItems, setCartItems, onOrderPlaced }: CartProps) => {
 
     setLoading(true);
 
-    // Simulate order placement without API
-    setTimeout(() => {
+    try {
+      const shopId = cartItems[0]?.shopId;
+      
+      const orderData = {
+        shopId,
+        items: cartItems.map(item => ({
+          productId: item.productId,
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+          unit: item.unit,
+          image: item.imageUrl
+        })),
+        totalAmount: calculateTotal(),
+        deliveryAddress: user.address || 'Default address',
+        paymentMethod: 'cash'
+      };
+
+      await customerAPI.createOrder(orderData);
+
       toast.success('Order placed successfully!');
       setCartItems([]);
       onOrderPlaced();
+    } catch (error) {
+      console.error('Order placement error:', error);
+      toast.error('Failed to place order. Please try again.');
+    } finally {
       setLoading(false);
-    }, 1500);
+    }
   };
 
   if (cartItems.length === 0) {
@@ -112,7 +136,7 @@ const Cart = ({ cartItems, setCartItems, onOrderPlaced }: CartProps) => {
                   onClick={() => updateQuantity(item.productId, 1)}
                   className="p-2 hover:bg-gray-100 rounded-r-lg"
                 >
-                  <Plus className="h-4 w-4" />
+                  <Plus className="h-4 w-5" />
                 </button>
               </div>
 
