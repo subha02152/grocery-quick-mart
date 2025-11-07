@@ -1,9 +1,7 @@
 import { useState } from 'react';
 import { Save, X } from 'lucide-react';
-import api from '../../utils/api';
 import { Product, Shop } from '../../types';
 import { toast } from '../../utils/toast';
-import Loading from '../shared/Loading';
 
 interface ProductFormProps {
   shop: Shop;
@@ -45,27 +43,12 @@ const ProductForm = ({ shop, product, onClose }: ProductFormProps) => {
     e.preventDefault();
     setLoading(true);
 
-    try {
-      const productData = {
-        ...formData,
-        shopId: shop.id,
-      };
-
-      if (product) {
-        await api.put(`/products/${product.id}`, productData);
-        toast.success('Product updated successfully');
-      } else {
-        await api.post('/products', productData);
-        toast.success('Product added successfully');
-      }
+    // Simulate API call with timeout
+    setTimeout(() => {
+      toast.success(product ? 'Product updated successfully' : 'Product added successfully');
       onClose();
-    } catch (error: any) {
-      const message =
-        error.response?.data?.message || 'Failed to save product';
-      toast.error(message);
-    } finally {
       setLoading(false);
-    }
+    }, 1000);
   };
 
   return (
@@ -225,8 +208,6 @@ const ProductForm = ({ shop, product, onClose }: ProductFormProps) => {
           </button>
         </div>
       </form>
-
-      {loading && <Loading fullScreen />}
     </div>
   );
 };

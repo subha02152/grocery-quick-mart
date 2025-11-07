@@ -1,23 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Store, Edit2, Save, X } from 'lucide-react';
-import api from '../../utils/api';
 import { Shop } from '../../types';
 import { toast } from '../../utils/toast';
-import Loading from '../shared/Loading';
-import { getUser } from '../../utils/auth';
+import { shopAPI } from '../../utils/api';
 
 const ShopManagement = () => {
   const [shop, setShop] = useState<Shop | null>(null);
-  const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     address: '',
     phone: '',
+    email: '',
     description: '',
     isOpen: true,
+    openingHours: '9:00 AM - 9:00 PM'
   });
-  const user = getUser();
 
   useEffect(() => {
     fetchShop();
@@ -25,24 +24,21 @@ const ShopManagement = () => {
 
   const fetchShop = async () => {
     try {
-      const response = await api.get('/shops');
-      const userShop = response.data.find(
-        (s: Shop) => s.ownerId === user?.id
-      );
-      if (userShop) {
-        setShop(userShop);
+      const response = await shopAPI.getShop();
+      if (response.success) {
+        setShop(response.data.shop);
         setFormData({
-          name: userShop.name,
-          address: userShop.address,
-          phone: userShop.phone,
-          description: userShop.description || '',
-          isOpen: userShop.isOpen,
+          name: response.data.shop.name,
+          address: response.data.shop.address,
+          phone: response.data.shop.phone,
+          email: response.data.shop.email || '',
+          description: response.data.shop.description || '',
+          isOpen: response.data.shop.isOpen,
+          openingHours: response.data.shop.openingHours || '9:00 AM - 9:00 PM'
         });
       }
     } catch (error: any) {
-      toast.error('Failed to load shop details');
-    } finally {
-      setLoading(false);
+      console.error('Fetch shop error:', error);
     }
   };
 
@@ -62,19 +58,14 @@ const ShopManagement = () => {
     setLoading(true);
 
     try {
-      if (shop) {
-        await api.put(`/shops/${shop.id}`, formData);
-        toast.success('Shop updated successfully');
-      } else {
-        const response = await api.post('/shops', formData);
-        setShop(response.data);
-        toast.success('Shop created successfully');
+      const response = await shopAPI.createOrUpdateShop(formData);
+      if (response.success) {
+        setShop(response.data.shop);
+        toast.success(response.message);
+        setEditing(false);
       }
-      setEditing(false);
-      fetchShop();
     } catch (error: any) {
-      const message =
-        error.response?.data?.message || 'Failed to save shop details';
+      const message = error.response?.data?.message || 'Error saving shop details';
       toast.error(message);
     } finally {
       setLoading(false);
@@ -87,16 +78,14 @@ const ShopManagement = () => {
         name: shop.name,
         address: shop.address,
         phone: shop.phone,
+        email: shop.email || '',
         description: shop.description || '',
         isOpen: shop.isOpen,
+        openingHours: shop.openingHours || '9:00 AM - 9:00 PM'
       });
     }
     setEditing(false);
   };
-
-  if (loading && !editing) {
-    return <Loading message="Loading shop details..." />;
-  }
 
   if (!shop && !editing) {
     return (
@@ -135,7 +124,7 @@ const ShopManagement = () => {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Shop Name
+              Shop Name *
             </label>
             <input
               type="text"
@@ -149,7 +138,21 @@ const ShopManagement = () => {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Address
+              Email *
+            </label>
+            <input
+              type="email"
+              name="email"
+              value={formData.email}
+              onChange={handleChange}
+              required
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Address *
             </label>
             <input
               type="text"
@@ -163,7 +166,7 @@ const ShopManagement = () => {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Phone
+              Phone *
             </label>
             <input
               type="tel"
@@ -171,6 +174,20 @@ const ShopManagement = () => {
               value={formData.phone}
               onChange={handleChange}
               required
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Opening Hours
+            </label>
+            <input
+              type="text"
+              name="openingHours"
+              value={formData.openingHours}
+              onChange={handleChange}
+              placeholder="9:00 AM - 9:00 PM"
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
@@ -208,7 +225,7 @@ const ShopManagement = () => {
               className="flex-1 flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
             >
               <Save className="h-4 w-4 mr-2" />
-              Save Changes
+              {loading ? 'Saving...' : shop ? 'Update Shop' : 'Create Shop'}
             </button>
             <button
               type="button"
@@ -234,6 +251,13 @@ const ShopManagement = () => {
 
             <div className="bg-gray-50 rounded-lg p-4">
               <label className="text-sm font-medium text-gray-600">
+                Email
+              </label>
+              <p className="text-lg text-gray-900 mt-1">{shop.email}</p>
+            </div>
+
+            <div className="bg-gray-50 rounded-lg p-4">
+              <label className="text-sm font-medium text-gray-600">
                 Address
               </label>
               <p className="text-lg text-gray-900 mt-1">{shop.address}</p>
@@ -243,6 +267,15 @@ const ShopManagement = () => {
               <label className="text-sm font-medium text-gray-600">Phone</label>
               <p className="text-lg text-gray-900 mt-1">{shop.phone}</p>
             </div>
+
+            {shop.openingHours && (
+              <div className="bg-gray-50 rounded-lg p-4">
+                <label className="text-sm font-medium text-gray-600">
+                  Opening Hours
+                </label>
+                <p className="text-lg text-gray-900 mt-1">{shop.openingHours}</p>
+              </div>
+            )}
 
             {shop.description && (
               <div className="bg-gray-50 rounded-lg p-4">
@@ -270,8 +303,6 @@ const ShopManagement = () => {
           </div>
         )
       )}
-
-      {loading && <Loading fullScreen />}
     </div>
   );
 };

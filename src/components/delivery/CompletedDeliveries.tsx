@@ -1,36 +1,41 @@
-import { useEffect, useState } from 'react';
 import { Package, CheckCircle, Clock } from 'lucide-react';
-import api from '../../utils/api';
 import { Order } from '../../types';
-import { toast } from '../../utils/toast';
-import Loading from '../shared/Loading';
-import { getUser } from '../../utils/auth';
 
 const CompletedDeliveries = () => {
-  const [deliveries, setDeliveries] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
-  const user = getUser();
-
-  useEffect(() => {
-    fetchDeliveries();
-  }, []);
-
-  const fetchDeliveries = async () => {
-    try {
-      const response = await api.get(
-        `/orders?deliveryAgentId=${user?.id}&status=delivered`
-      );
-      setDeliveries(response.data);
-    } catch (error: any) {
-      toast.error('Failed to load completed deliveries');
-    } finally {
-      setLoading(false);
+  // Hardcoded deliveries - NO API CALLS
+  const deliveries: Order[] = [
+    {
+      id: '3',
+      orderNumber: 'ORD-002',
+      customerName: 'Mike Johnson',
+      customerPhone: '+1 (555) 456-7890',
+      deliveryAddress: '789 Green Road, Westside',
+      totalAmount: 18.49,
+      items: [
+        { name: 'Milk', quantity: 2, price: 2.49, unit: 'liter' },
+        { name: 'Eggs', quantity: 1, price: 4.99, unit: 'dozen' }
+      ],
+      createdAt: '2024-01-16T09:15:00Z',
+      updatedAt: '2024-01-16T15:00:00Z',
+      status: 'delivered'
+    },
+    {
+      id: '4',
+      orderNumber: 'ORD-004',
+      customerName: 'Sarah Wilson',
+      customerPhone: '+1 (555) 111-2222',
+      deliveryAddress: '321 Pine Street, Northside',
+      totalAmount: 42.75,
+      items: [
+        { name: 'Apples', quantity: 3, price: 2.99, unit: 'kg' },
+        { name: 'Bread', quantity: 2, price: 3.99, unit: 'pack' },
+        { name: 'Potatoes', quantity: 2, price: 1.99, unit: 'kg' }
+      ],
+      createdAt: '2024-01-15T14:20:00Z',
+      updatedAt: '2024-01-15T18:45:00Z',
+      status: 'delivered'
     }
-  };
-
-  if (loading) {
-    return <Loading message="Loading completed deliveries..." />;
-  }
+  ];
 
   if (deliveries.length === 0) {
     return (
@@ -60,7 +65,7 @@ const CompletedDeliveries = () => {
               <div>
                 <div className="flex items-center space-x-2 mb-2">
                   <span className="font-semibold text-gray-900">
-                    Delivery #{order.id.slice(0, 8)}
+                    Delivery #{order.orderNumber}
                   </span>
                   <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium flex items-center">
                     <CheckCircle className="h-3 w-3 mr-1" />

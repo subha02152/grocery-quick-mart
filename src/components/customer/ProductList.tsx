@@ -1,9 +1,6 @@
-import { useEffect, useState } from 'react';
 import { ArrowLeft, Plus, Minus, Package } from 'lucide-react';
-import api from '../../utils/api';
 import { Shop, Product, CartItem } from '../../types';
 import { toast } from '../../utils/toast';
-import Loading from '../shared/Loading';
 
 interface ProductListProps {
   shop: Shop;
@@ -13,23 +10,81 @@ interface ProductListProps {
 }
 
 const ProductList = ({ shop, onBack, cartItems, setCartItems }: ProductListProps) => {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchProducts();
-  }, [shop.id]);
-
-  const fetchProducts = async () => {
-    try {
-      const response = await api.get(`/products?shopId=${shop.id}`);
-      setProducts(response.data);
-    } catch (error: any) {
-      toast.error('Failed to load products. Please try again.');
-    } finally {
-      setLoading(false);
+  // Hardcoded products - NO API CALLS
+  const products: Product[] = [
+    {
+      id: '1',
+      name: 'Fresh Apples',
+      description: 'Sweet and crunchy red apples, perfect for snacks',
+      price: 2.99,
+      unit: 'kg',
+      stock: 50,
+      isAvailable: true,
+      shopId: shop.id,
+      imageUrl: '',
+      category: 'Fruits'
+    },
+    {
+      id: '2',
+      name: 'Bananas',
+      description: 'Fresh yellow bananas, rich in potassium',
+      price: 1.49,
+      unit: 'dozen',
+      stock: 30,
+      isAvailable: true,
+      shopId: shop.id,
+      imageUrl: '',
+      category: 'Fruits'
+    },
+    {
+      id: '3',
+      name: 'Whole Wheat Bread',
+      description: 'Healthy whole wheat bread, freshly baked',
+      price: 3.99,
+      unit: 'pack',
+      stock: 20,
+      isAvailable: true,
+      shopId: shop.id,
+      imageUrl: '',
+      category: 'Bakery'
+    },
+    {
+      id: '4',
+      name: 'Milk',
+      description: 'Fresh pasteurized milk, 1 liter',
+      price: 2.49,
+      unit: 'liter',
+      stock: 15,
+      isAvailable: true,
+      shopId: shop.id,
+      imageUrl: '',
+      category: 'Dairy'
+    },
+    {
+      id: '5',
+      name: 'Eggs',
+      description: 'Farm fresh eggs, pack of 12',
+      price: 4.99,
+      unit: 'dozen',
+      stock: 0,
+      isAvailable: false,
+      shopId: shop.id,
+      imageUrl: '',
+      category: 'Dairy'
+    },
+    {
+      id: '6',
+      name: 'Potatoes',
+      description: 'Fresh potatoes, great for cooking',
+      price: 1.99,
+      unit: 'kg',
+      stock: 40,
+      isAvailable: true,
+      shopId: shop.id,
+      imageUrl: '',
+      category: 'Vegetables'
     }
-  };
+  ];
 
   const getCartQuantity = (productId: string) => {
     const item = cartItems.find((item) => item.productId === productId);
@@ -83,10 +138,6 @@ const ProductList = ({ shop, onBack, cartItems, setCartItems }: ProductListProps
     }
   };
 
-  if (loading) {
-    return <Loading message="Loading products..." />;
-  }
-
   return (
     <div>
       <button
@@ -102,90 +153,80 @@ const ProductList = ({ shop, onBack, cartItems, setCartItems }: ProductListProps
         <p className="text-gray-600">{shop.address}</p>
       </div>
 
-      {products.length === 0 ? (
-        <div className="text-center py-12">
-          <Package className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-xl font-semibold text-gray-700 mb-2">
-            No products available
-          </h3>
-          <p className="text-gray-500">This shop has no products listed yet</p>
-        </div>
-      ) : (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {products.map((product) => {
-            const cartQty = getCartQuantity(product.id);
-            return (
-              <div
-                key={product.id}
-                className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition"
-              >
-                <div className="bg-gray-100 h-48 flex items-center justify-center">
-                  {product.imageUrl ? (
-                    <img
-                      src={product.imageUrl}
-                      alt={product.name}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <Package className="h-16 w-16 text-gray-400" />
-                  )}
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {products.map((product) => {
+          const cartQty = getCartQuantity(product.id);
+          return (
+            <div
+              key={product.id}
+              className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition"
+            >
+              <div className="bg-gray-100 h-48 flex items-center justify-center">
+                {product.imageUrl ? (
+                  <img
+                    src={product.imageUrl}
+                    alt={product.name}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <Package className="h-16 w-16 text-gray-400" />
+                )}
+              </div>
+              <div className="p-4">
+                <h3 className="font-semibold text-lg text-gray-900 mb-1">
+                  {product.name}
+                </h3>
+                {product.description && (
+                  <p className="text-sm text-gray-600 mb-2 line-clamp-2">
+                    {product.description}
+                  </p>
+                )}
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xl font-bold text-green-600">
+                    ₹{product.price}/{product.unit}
+                  </span>
+                  <span className="text-sm text-gray-500">
+                    Stock: {product.stock}
+                  </span>
                 </div>
-                <div className="p-4">
-                  <h3 className="font-semibold text-lg text-gray-900 mb-1">
-                    {product.name}
-                  </h3>
-                  {product.description && (
-                    <p className="text-sm text-gray-600 mb-2 line-clamp-2">
-                      {product.description}
-                    </p>
-                  )}
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-xl font-bold text-green-600">
-                      ₹{product.price}/{product.unit}
-                    </span>
-                    <span className="text-sm text-gray-500">
-                      Stock: {product.stock}
-                    </span>
-                  </div>
 
-                  {!product.isAvailable || product.stock === 0 ? (
+                {!product.isAvailable || product.stock === 0 ? (
+                  <button
+                    disabled
+                    className="w-full bg-gray-300 text-gray-600 py-2 rounded-lg cursor-not-allowed"
+                  >
+                    Out of Stock
+                  </button>
+                ) : cartQty > 0 ? (
+                  <div className="flex items-center justify-between bg-green-50 rounded-lg p-2">
                     <button
-                      disabled
-                      className="w-full bg-gray-300 text-gray-600 py-2 rounded-lg cursor-not-allowed"
+                      onClick={() => removeFromCart(product.id)}
+                      className="bg-white rounded-full p-1 hover:bg-gray-100"
                     >
-                      Out of Stock
+                      <Minus className="h-5 w-5 text-green-600" />
                     </button>
-                  ) : cartQty > 0 ? (
-                    <div className="flex items-center justify-between bg-green-50 rounded-lg p-2">
-                      <button
-                        onClick={() => removeFromCart(product.id)}
-                        className="bg-white rounded-full p-1 hover:bg-gray-100"
-                      >
-                        <Minus className="h-5 w-5 text-green-600" />
-                      </button>
-                      <span className="font-semibold text-lg">{cartQty}</span>
-                      <button
-                        onClick={() => addToCart(product)}
-                        className="bg-white rounded-full p-1 hover:bg-gray-100"
-                        disabled={cartQty >= product.stock}
-                      >
-                        <Plus className="h-5 w-5 text-green-600" />
-                      </button>
-                    </div>
-                  ) : (
+                    <span className="font-semibold text-lg">{cartQty}</span>
                     <button
                       onClick={() => addToCart(product)}
-                      className="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition font-medium"
+                      className="bg-white rounded-full p-1 hover:bg-gray-100"
+                      disabled={cartQty >= product.stock}
                     >
-                      Add to Cart
+                      <Plus className="h-5 w-5 text-green-600" />
                     </button>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => addToCart(product)}
+                    className="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition font-medium"
+                  >
+                    Add to Cart
+                  </button>
+                )}
               </div>
-            );
-          })}
-        </div>
-      )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 };

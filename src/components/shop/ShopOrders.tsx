@@ -1,16 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Package, Clock } from 'lucide-react';
-import api from '../../utils/api';
 import { Order, Shop } from '../../types';
 import { toast } from '../../utils/toast';
-import Loading from '../shared/Loading';
-import { getUser } from '../../utils/auth';
+import { orderAPI } from '../../utils/api';
 
 const ShopOrders = () => {
-  const [orders, setOrders] = useState<Order[]>([]);
   const [shop, setShop] = useState<Shop | null>(null);
-  const [loading, setLoading] = useState(true);
-  const user = getUser();
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     fetchShopAndOrders();
@@ -18,33 +15,38 @@ const ShopOrders = () => {
 
   const fetchShopAndOrders = async () => {
     try {
-      const shopsResponse = await api.get('/shops');
-      const userShop = shopsResponse.data.find(
-        (s: Shop) => s.ownerId === user?.id
-      );
+      setLoading(true);
+      const [shopResponse, ordersResponse] = await Promise.all([
+        orderAPI.getShop(),
+        orderAPI.getOrders()
+      ]);
 
-      if (userShop) {
-        setShop(userShop);
-        const ordersResponse = await api.get(`/orders?shopId=${userShop.id}`);
-        setOrders(ordersResponse.data);
+      if (shopResponse.success) {
+        setShop(shopResponse.data.shop);
+      }
+
+      if (ordersResponse.success) {
+        setOrders(ordersResponse.data.orders);
       }
     } catch (error: any) {
-      toast.error('Failed to load orders');
+      console.error('Fetch error:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const updateOrderStatus = async (
-    orderId: string,
-    status: Order['status']
-  ) => {
+  const updateOrderStatus = async (orderId: string, status: Order['status']) => {
     try {
-      await api.put(`/orders/${orderId}/status`, { status });
-      toast.success(`Order marked as ${status}`);
-      fetchShopAndOrders();
+      const response = await orderAPI.updateOrderStatus(orderId, status);
+      if (response.success) {
+        setOrders(orders.map(order => 
+          order.id === orderId ? { ...order, status, updatedAt: new Date().toISOString() } : order
+        ));
+        toast.success(`Order marked as ${status}`);
+      }
     } catch (error: any) {
-      toast.error('Failed to update order status');
+      const message = error.response?.data?.message || 'Error updating order status';
+      toast.error(message);
     }
   };
 
@@ -65,18 +67,25 @@ const ShopOrders = () => {
     }
   };
 
-  if (loading) {
-    return <Loading message="Loading orders..." />;
-  }
-
   if (!shop) {
     return (
       <div className="text-center py-12">
         <Package className="h-16 w-16 text-gray-400 mx-auto mb-4" />
         <h3 className="text-xl font-semibold text-gray-700 mb-2">
-          No shop registered
+          Shop Required
         </h3>
-        <p className="text-gray-500">Please create your shop first</p>
+        <p className="text-gray-500">
+          Please create a shop first to view orders
+        </p>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="text-center py-12">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+        <p className="mt-4 text-gray-600">Loading orders...</p>
       </div>
     );
   }
@@ -95,7 +104,7 @@ const ShopOrders = () => {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-6">Orders</h2>
+      <h2 className="text-2xl font-bold mb-6">Orders ({orders.length})</h2>
 
       <div className="space-y-4">
         {orders.map((order) => (
@@ -107,7 +116,7 @@ const ShopOrders = () => {
               <div>
                 <div className="flex items-center space-x-2 mb-2">
                   <span className="font-semibold text-gray-900">
-                    Order #{order.id.slice(0, 8)}
+                    Order #{order.orderNumber}
                   </span>
                   <span
                     className={`px-3 py-1 rounded-full text-xs font-medium capitalize ${getStatusColor(
@@ -156,6 +165,10 @@ const ShopOrders = () => {
 
             <div className="border-t pt-4 mb-4 text-sm text-gray-600">
               <p>
+                <span className="font-medium">Customer:</span>{' '}
+                {order.customerName}
+              </p>
+              <p>
                 <span className="font-medium">Delivery Address:</span>{' '}
                 {order.deliveryAddress}
               </p>
@@ -196,6 +209,14 @@ const ShopOrders = () => {
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
                 >
                   Mark as Dispatched
+                </button>
+              )}
+              {order.status === 'dispatched' && (
+                <button
+                  onClick={() => updateOrderStatus(order.id, 'delivered')}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm"
+                >
+                  Mark as Delivered
                 </button>
               )}
             </div>

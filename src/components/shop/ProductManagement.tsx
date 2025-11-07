@@ -1,19 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Package } from 'lucide-react';
-import api from '../../utils/api';
 import { Product, Shop } from '../../types';
 import { toast } from '../../utils/toast';
-import Loading from '../shared/Loading';
-import { getUser } from '../../utils/auth';
 import ProductForm from './ProductForm';
+import { productAPI } from '../../utils/api';
 
 const ProductManagement = () => {
-  const [products, setProducts] = useState<Product[]>([]);
   const [shop, setShop] = useState<Shop | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [products, setProducts] = useState<Product[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const user = getUser();
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     fetchShopAndProducts();
@@ -21,20 +18,21 @@ const ProductManagement = () => {
 
   const fetchShopAndProducts = async () => {
     try {
-      const shopsResponse = await api.get('/shops');
-      const userShop = shopsResponse.data.find(
-        (s: Shop) => s.ownerId === user?.id
-      );
+      setLoading(true);
+      const [shopResponse, productsResponse] = await Promise.all([
+        productAPI.getShop(),
+        productAPI.getProducts()
+      ]);
 
-      if (userShop) {
-        setShop(userShop);
-        const productsResponse = await api.get(
-          `/products?shopId=${userShop.id}`
-        );
-        setProducts(productsResponse.data);
+      if (shopResponse.success) {
+        setShop(shopResponse.data.shop);
+      }
+
+      if (productsResponse.success) {
+        setProducts(productsResponse.data.products);
       }
     } catch (error: any) {
-      toast.error('Failed to load products');
+      console.error('Fetch error:', error);
     } finally {
       setLoading(false);
     }
@@ -46,11 +44,14 @@ const ProductManagement = () => {
     }
 
     try {
-      await api.delete(`/products/${productId}`);
-      toast.success('Product deleted successfully');
-      fetchShopAndProducts();
+      const response = await productAPI.deleteProduct(productId);
+      if (response.success) {
+        setProducts(products.filter(product => product.id !== productId));
+        toast.success('Product deleted successfully');
+      }
     } catch (error: any) {
-      toast.error('Failed to delete product');
+      const message = error.response?.data?.message || 'Error deleting product';
+      toast.error(message);
     }
   };
 
@@ -62,21 +63,19 @@ const ProductManagement = () => {
   const handleFormClose = () => {
     setShowForm(false);
     setEditingProduct(null);
-    fetchShopAndProducts();
+    fetchShopAndProducts(); // Refresh products after form close
   };
-
-  if (loading) {
-    return <Loading message="Loading products..." />;
-  }
 
   if (!shop) {
     return (
       <div className="text-center py-12">
         <Package className="h-16 w-16 text-gray-400 mx-auto mb-4" />
         <h3 className="text-xl font-semibold text-gray-700 mb-2">
-          No shop registered
+          Shop Required
         </h3>
-        <p className="text-gray-500">Please create your shop first</p>
+        <p className="text-gray-500 mb-6">
+          Please create a shop first to manage products
+        </p>
       </div>
     );
   }
@@ -104,7 +103,12 @@ const ProductManagement = () => {
         </button>
       </div>
 
-      {products.length === 0 ? (
+      {loading ? (
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading products...</p>
+        </div>
+      ) : products.length === 0 ? (
         <div className="text-center py-12">
           <Package className="h-16 w-16 text-gray-400 mx-auto mb-4" />
           <h3 className="text-xl font-semibold text-gray-700 mb-2">
@@ -128,9 +132,9 @@ const ProductManagement = () => {
               className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition"
             >
               <div className="bg-gray-100 h-48 flex items-center justify-center">
-                {product.imageUrl ? (
+                {product.images && product.images.length > 0 ? (
                   <img
-                    src={product.imageUrl}
+                    src={product.images[0]}
                     alt={product.name}
                     className="h-full w-full object-cover"
                   />
@@ -168,6 +172,17 @@ const ProductManagement = () => {
                     Stock: {product.stock}
                   </span>
                 </div>
+
+                {product.discount > 0 && (
+                  <div className="mb-3">
+                    <span className="text-sm text-red-600 line-through mr-2">
+                      ₹{product.originalPrice}
+                    </span>
+                    <span className="text-sm bg-red-100 text-red-800 px-2 py-1 rounded">
+                      {product.discount}% OFF
+                    </span>
+                  </div>
+                )}
 
                 <div className="flex space-x-2">
                   <button

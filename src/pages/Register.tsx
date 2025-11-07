@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShoppingBag, Mail, Lock, User, Phone, MapPin } from 'lucide-react';
-import api from '../utils/api';
-import { setAuthToken, setUser } from '../utils/auth';
 import { toast } from '../utils/toast';
+import { authAPI } from '../utils/api';
+import { setAuthToken, setUser } from '../utils/auth';
 import Loading from '../components/shared/Loading';
 
 const Register = () => {
@@ -32,22 +32,41 @@ const Register = () => {
     setLoading(true);
 
     try {
-      const response = await api.post('/users/register', formData);
-      const { token, user } = response.data;
-
-      setAuthToken(token);
-      setUser(user);
-
-      toast.success('Registration successful! Welcome to QuickMart!');
-      navigate(`/dashboard/${user.role}`);
+      const response = await authAPI.register(formData);
+      
+      if (response.success) {
+        // Store user data and token
+        setAuthToken(response.data.token);
+        setUser(response.data.user);
+        
+        toast.success(response.message);
+        
+        // Navigate to the appropriate dashboard
+        navigate(`/dashboard/${response.data.user.role}`);
+      }
     } catch (error: any) {
-      const message =
-        error.response?.data?.message ||
-        'Registration failed. Please try again.';
-      toast.error(message);
+      const errorMessage = error.response?.data?.message || error.message || 'Registration failed. Please try again.';
+      toast.error(errorMessage);
+      console.error('Registration error:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  // Test function for direct navigation (keep your existing test buttons)
+  const handleTestLogin = (role: 'customer' | 'shop_owner' | 'delivery_agent') => {
+    const testUser = {
+      id: 'test-' + Date.now(),
+      name: `Test ${role.replace('_', ' ')}`,
+      email: `test-${role}@example.com`,
+      role: role,
+      phone: '1234567890',
+      address: 'Test Address'
+    };
+    
+    setUser(testUser);
+    setAuthToken('test-token-' + Date.now());
+    navigate(`/dashboard/${role}`);
   };
 
   return (
@@ -202,6 +221,31 @@ const Register = () => {
             {loading ? 'Creating Account...' : 'Register'}
           </button>
         </form>
+
+        {/* Test buttons to directly navigate to dashboards */}
+        <div className="mt-4 space-y-2">
+          <p className="text-center text-sm text-gray-500">Or test directly:</p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleTestLogin('customer')}
+              className="flex-1 bg-blue-100 text-blue-700 py-2 rounded text-sm hover:bg-blue-200"
+            >
+              Customer
+            </button>
+            <button
+              onClick={() => handleTestLogin('shop_owner')}
+              className="flex-1 bg-orange-100 text-orange-700 py-2 rounded text-sm hover:bg-orange-200"
+            >
+              Shop Owner
+            </button>
+            <button
+              onClick={() => handleTestLogin('delivery_agent')}
+              className="flex-1 bg-purple-100 text-purple-700 py-2 rounded text-sm hover:bg-purple-200"
+            >
+              Delivery
+            </button>
+          </div>
+        </div>
 
         <div className="mt-6 text-center">
           <p className="text-gray-600">

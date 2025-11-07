@@ -1,46 +1,48 @@
-import { useEffect, useState } from 'react';
 import { Package, MapPin, Phone, Clock } from 'lucide-react';
-import api from '../../utils/api';
 import { Order } from '../../types';
 import { toast } from '../../utils/toast';
-import Loading from '../shared/Loading';
-import { getUser } from '../../utils/auth';
 
 const AssignedDeliveries = () => {
-  const [deliveries, setDeliveries] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
-  const user = getUser();
-
-  useEffect(() => {
-    fetchDeliveries();
-  }, []);
-
-  const fetchDeliveries = async () => {
-    try {
-      const response = await api.get(
-        `/orders?deliveryAgentId=${user?.id}&status=dispatched`
-      );
-      setDeliveries(response.data);
-    } catch (error: any) {
-      toast.error('Failed to load deliveries');
-    } finally {
-      setLoading(false);
+  // Hardcoded deliveries - NO API CALLS
+  const deliveries: Order[] = [
+    {
+      id: '1',
+      orderNumber: 'ORD-001',
+      customerName: 'John Doe',
+      customerPhone: '+1 (555) 123-4567',
+      deliveryAddress: '123 Main Street, City Center',
+      totalAmount: 25.97,
+      items: [
+        { name: 'Apples', quantity: 2, price: 2.99, unit: 'kg' },
+        { name: 'Bananas', quantity: 1, price: 1.49, unit: 'dozen' },
+        { name: 'Bread', quantity: 1, price: 3.99, unit: 'pack' }
+      ],
+      createdAt: '2024-01-17T10:30:00Z',
+      updatedAt: '2024-01-17T10:30:00Z',
+      status: 'dispatched'
+    },
+    {
+      id: '2',
+      orderNumber: 'ORD-003',
+      customerName: 'Jane Smith',
+      customerPhone: '+1 (555) 987-6543',
+      deliveryAddress: '456 Oak Avenue, Downtown',
+      totalAmount: 32.50,
+      items: [
+        { name: 'Potatoes', quantity: 3, price: 1.99, unit: 'kg' },
+        { name: 'Apples', quantity: 1, price: 2.99, unit: 'kg' },
+        { name: 'Milk', quantity: 2, price: 2.49, unit: 'liter' }
+      ],
+      createdAt: '2024-01-17T11:15:00Z',
+      updatedAt: '2024-01-17T11:15:00Z',
+      status: 'dispatched'
     }
-  };
+  ];
 
-  const updateDeliveryStatus = async (orderId: string, status: string) => {
-    try {
-      await api.put(`/orders/${orderId}/status`, { status });
-      toast.success(`Delivery marked as ${status}`);
-      fetchDeliveries();
-    } catch (error: any) {
-      toast.error('Failed to update delivery status');
-    }
+  const updateDeliveryStatus = (orderId: string, status: string) => {
+    toast.success(`Delivery marked as ${status}`);
+    alert(`Order ${orderId} marked as ${status}`);
   };
-
-  if (loading) {
-    return <Loading message="Loading deliveries..." />;
-  }
 
   if (deliveries.length === 0) {
     return (
@@ -70,7 +72,7 @@ const AssignedDeliveries = () => {
               <div>
                 <div className="flex items-center space-x-2 mb-2">
                   <span className="font-semibold text-gray-900">
-                    Delivery #{order.id.slice(0, 8)}
+                    Delivery #{order.orderNumber}
                   </span>
                   <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
                     Dispatched

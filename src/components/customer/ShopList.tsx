@@ -1,50 +1,50 @@
-import { useEffect, useState } from 'react';
-import { Store, MapPin, Phone, Clock } from 'lucide-react';
-import api from '../../utils/api';
+import { Store, MapPin, Phone } from 'lucide-react';
 import { Shop } from '../../types';
-import { toast } from '../../utils/toast';
-import Loading from '../shared/Loading';
 
 interface ShopListProps {
   onSelectShop: (shop: Shop) => void;
 }
 
 const ShopList = ({ onSelectShop }: ShopListProps) => {
-  const [shops, setShops] = useState<Shop[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchShops();
-  }, []);
-
-  const fetchShops = async () => {
-    try {
-      const response = await api.get('/shops');
-      setShops(response.data);
-    } catch (error: any) {
-      toast.error('Failed to load shops. Please try again.');
-    } finally {
-      setLoading(false);
+  // Hardcoded shops - NO API CALLS
+  const shops: Shop[] = [
+    {
+      id: '1',
+      name: 'Fresh Grocery Store',
+      description: 'Your neighborhood fresh grocery store with fresh produce and daily essentials',
+      address: '123 Main Street, City Center',
+      phone: '+1 (555) 123-4567',
+      ownerId: '1',
+      isActive: true,
+      isOpen: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+    {
+      id: '2', 
+      name: 'Quick Mart',
+      description: 'Fast and convenient shopping for all your grocery needs',
+      address: '456 Oak Avenue, Downtown',
+      phone: '+1 (555) 987-6543',
+      ownerId: '2',
+      isActive: true,
+      isOpen: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+    {
+      id: '3',
+      name: 'Organic Market',
+      description: '100% organic products and healthy food options',
+      address: '789 Green Road, Westside',
+      phone: '+1 (555) 456-7890',
+      ownerId: '3',
+      isActive: true,
+      isOpen: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     }
-  };
-
-  if (loading) {
-    return <Loading message="Loading nearby shops..." />;
-  }
-
-  if (shops.length === 0) {
-    return (
-      <div className="text-center py-12">
-        <Store className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-        <h3 className="text-xl font-semibold text-gray-700 mb-2">
-          No shops available
-        </h3>
-        <p className="text-gray-500">
-          Check back later for nearby grocery stores
-        </p>
-      </div>
-    );
-  }
+  ];
 
   return (
     <div>

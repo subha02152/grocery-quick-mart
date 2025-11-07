@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShoppingBag, Mail, Lock } from 'lucide-react';
-import api from '../utils/api';
+import { authAPI } from '../utils/api'; // Use authAPI instead of direct api
 import { setAuthToken, setUser } from '../utils/auth';
 import { toast } from '../utils/toast';
 import Loading from '../components/shared/Loading';
@@ -26,21 +26,42 @@ const Login = () => {
     setLoading(true);
 
     try {
-      const response = await api.post('/users/login', formData);
-      const { token, user } = response.data;
+      // Use authAPI.login instead of direct api.post
+      const response = await authAPI.login(formData);
+      
+      if (response.success) {
+        const { token, user } = response.data;
 
-      setAuthToken(token);
-      setUser(user);
+        setAuthToken(token);
+        setUser(user);
 
-      toast.success(`Welcome back, ${user.name}!`);
-      navigate(`/dashboard/${user.role}`);
+        toast.success(`Welcome back, ${user.name}!`);
+        navigate(`/dashboard/${user.role}`);
+      }
     } catch (error: any) {
-      const message =
-        error.response?.data?.message || 'Login failed. Please try again.';
+      const message = error.response?.data?.message || error.message || 'Login failed. Please try again.';
       toast.error(message);
+      console.error('Login error:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  // Test login function
+  const handleTestLogin = (role: 'customer' | 'shop_owner' | 'delivery_agent') => {
+    const testUser = {
+      id: 'test-' + Date.now(),
+      name: `Test ${role.replace('_', ' ')}`,
+      email: `test-${role}@example.com`,
+      role: role,
+      phone: '1234567890',
+      address: 'Test Address'
+    };
+    
+    setUser(testUser);
+    setAuthToken('test-token-' + Date.now());
+    toast.success(`Test login as ${role}`);
+    navigate(`/dashboard/${role}`);
   };
 
   return (
@@ -108,6 +129,31 @@ const Login = () => {
           </button>
         </form>
 
+        {/* Test login buttons */}
+        <div className="mt-4 space-y-2">
+          <p className="text-center text-sm text-gray-500">Or test directly:</p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleTestLogin('customer')}
+              className="flex-1 bg-blue-100 text-blue-700 py-2 rounded text-sm hover:bg-blue-200"
+            >
+              Customer
+            </button>
+            <button
+              onClick={() => handleTestLogin('shop_owner')}
+              className="flex-1 bg-orange-100 text-orange-700 py-2 rounded text-sm hover:bg-orange-200"
+            >
+              Shop Owner
+            </button>
+            <button
+              onClick={() => handleTestLogin('delivery_agent')}
+              className="flex-1 bg-purple-100 text-purple-700 py-2 rounded text-sm hover:bg-purple-200"
+            >
+              Delivery
+            </button>
+          </div>
+        </div>
+
         <div className="mt-6 text-center">
           <p className="text-gray-600">
             Don't have an account?{' '}
@@ -136,4 +182,3 @@ const Login = () => {
 };
 
 export default Login;
-                           

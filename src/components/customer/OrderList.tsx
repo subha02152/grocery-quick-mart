@@ -1,28 +1,52 @@
-import { useEffect, useState } from 'react';
 import { Package, Clock, CheckCircle, XCircle, Truck } from 'lucide-react';
-import api from '../../utils/api';
 import { Order } from '../../types';
-import { toast } from '../../utils/toast';
-import Loading from '../shared/Loading';
 
 const OrderList = () => {
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchOrders();
-  }, []);
-
-  const fetchOrders = async () => {
-    try {
-      const response = await api.get('/orders');
-      setOrders(response.data);
-    } catch (error: any) {
-      toast.error('Failed to load orders. Please try again.');
-    } finally {
-      setLoading(false);
+  // Hardcoded orders - NO API CALLS
+  const orders: Order[] = [
+    {
+      id: '1',
+      orderNumber: 'ORD-001',
+      status: 'delivered',
+      totalAmount: 25.97,
+      items: [
+        { name: 'Apples', quantity: 2, price: 2.99, unit: 'kg' },
+        { name: 'Bananas', quantity: 1, price: 1.49, unit: 'dozen' },
+        { name: 'Bread', quantity: 1, price: 3.99, unit: 'pack' }
+      ],
+      deliveryAddress: '123 Main Street, City Center',
+      customerPhone: '+1 (555) 123-4567',
+      createdAt: '2024-01-15T10:30:00Z',
+      deliveredAt: '2024-01-15T14:45:00Z'
+    },
+    {
+      id: '2',
+      orderNumber: 'ORD-002', 
+      status: 'processing',
+      totalAmount: 18.49,
+      items: [
+        { name: 'Milk', quantity: 2, price: 2.49, unit: 'liter' },
+        { name: 'Eggs', quantity: 1, price: 4.99, unit: 'dozen' }
+      ],
+      deliveryAddress: '456 Oak Avenue, Downtown',
+      customerPhone: '+1 (555) 987-6543',
+      createdAt: '2024-01-16T09:15:00Z'
+    },
+    {
+      id: '3',
+      orderNumber: 'ORD-003',
+      status: 'dispatched',
+      totalAmount: 32.50,
+      items: [
+        { name: 'Potatoes', quantity: 3, price: 1.99, unit: 'kg' },
+        { name: 'Apples', quantity: 1, price: 2.99, unit: 'kg' },
+        { name: 'Milk', quantity: 2, price: 2.49, unit: 'liter' }
+      ],
+      deliveryAddress: '789 Green Road, Westside',
+      customerPhone: '+1 (555) 456-7890',
+      createdAt: '2024-01-17T11:20:00Z'
     }
-  };
+  ];
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -54,10 +78,6 @@ const OrderList = () => {
     }
   };
 
-  if (loading) {
-    return <Loading message="Loading your orders..." />;
-  }
-
   if (orders.length === 0) {
     return (
       <div className="text-center py-12">
@@ -86,7 +106,7 @@ const OrderList = () => {
               <div>
                 <div className="flex items-center space-x-2 mb-2">
                   <span className="font-semibold text-gray-900">
-                    Order #{order.id.slice(0, 8)}
+                    Order #{order.orderNumber}
                   </span>
                   <span
                     className={`px-3 py-1 rounded-full text-xs font-medium capitalize ${getStatusColor(
