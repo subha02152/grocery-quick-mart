@@ -47,22 +47,7 @@ const Login = () => {
     }
   };
 
-  // Test login function
-  const handleTestLogin = (role: 'customer' | 'shop_owner' | 'delivery_agent') => {
-    const testUser = {
-      id: 'test-' + Date.now(),
-      name: `Test ${role.replace('_', ' ')}`,
-      email: `test-${role}@example.com`,
-      role: role,
-      phone: '1234567890',
-      address: 'Test Address'
-    };
-    
-    setUser(testUser);
-    setAuthToken('test-token-' + Date.now());
-    toast.success(`Test login as ${role}`);
-    navigate(`/dashboard/${role}`);
-  };
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center px-4">
@@ -129,31 +114,7 @@ const Login = () => {
           </button>
         </form>
 
-        {/* Test login buttons */}
-        <div className="mt-4 space-y-2">
-          <p className="text-center text-sm text-gray-500">Or test directly:</p>
-          <div className="flex gap-2">
-            <button
-              onClick={() => handleTestLogin('customer')}
-              className="flex-1 bg-blue-100 text-blue-700 py-2 rounded text-sm hover:bg-blue-200"
-            >
-              Customer
-            </button>
-            <button
-              onClick={() => handleTestLogin('shop_owner')}
-              className="flex-1 bg-orange-100 text-orange-700 py-2 rounded text-sm hover:bg-orange-200"
-            >
-              Shop Owner
-            </button>
-            <button
-              onClick={() => handleTestLogin('delivery_agent')}
-              className="flex-1 bg-purple-100 text-purple-700 py-2 rounded text-sm hover:bg-purple-200"
-            >
-              Delivery
-            </button>
-          </div>
-        </div>
-
+      
         <div className="mt-6 text-center">
           <p className="text-gray-600">
             Don't have an account?{' '}

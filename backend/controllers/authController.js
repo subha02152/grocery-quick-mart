@@ -1,3 +1,5 @@
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
 import User from '../models/user.js';
 
 // Mock user storage for when MongoDB is not available
@@ -23,24 +25,45 @@ export const register = async (req, res) => {
           });
         }
 
+        // Hash password
+        const hashedPassword = await bcrypt.hash(password, 12);
+
         // Create user in MongoDB
         const user = await User.create({
           name,
           email,
-          password,
+          password: hashedPassword,
           phone,
           address,
           role: role || 'customer'
         });
 
-        // Generate token (you'll need to implement this)
-        const token = 'jwt-token-' + Date.now();
+        // ✅ REAL JWT TOKEN
+        const token = jwt.sign(
+          { id: user._id }, 
+          process.env.JWT_SECRET,
+          { expiresIn: '30d' }
+        );
+
+        // Remove password from response
+        const userResponse = {
+          id: user._id,
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          address: user.address,
+          role: user.role,
+          isActive: user.isActive,
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt
+        };
 
         return res.status(201).json({
           success: true,
           message: 'Registration successful! Welcome to QuickMart!',
           data: {
-            user,
+            user: userResponse,
             token
           }
         });
@@ -75,8 +98,12 @@ export const register = async (req, res) => {
 
     mockUsers.push(mockUser);
 
-    // Mock token
-    const token = 'mock-token-' + Date.now();
+    // ✅ REAL JWT TOKEN even for mock users
+    const token = jwt.sign(
+      { id: mockUser.id }, 
+      process.env.JWT_SECRET,
+      { expiresIn: '30d' }
+    );
 
     res.status(201).json({
       success: true,
@@ -119,8 +146,8 @@ export const login = async (req, res) => {
           });
         }
 
-        // Check password (you'll need to implement password checking)
-        const isPasswordValid = true; // Replace with actual password check
+        // Check password
+        const isPasswordValid = await bcrypt.compare(password, user.password);
 
         if (!isPasswordValid) {
           return res.status(401).json({
@@ -129,13 +156,32 @@ export const login = async (req, res) => {
           });
         }
 
-        const token = 'jwt-token-' + Date.now();
+        // ✅ REAL JWT TOKEN
+        const token = jwt.sign(
+          { id: user._id },
+          process.env.JWT_SECRET,
+          { expiresIn: '30d' }
+        );
+
+        // Remove password from response
+        const userResponse = {
+          id: user._id,
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          address: user.address,
+          role: user.role,
+          isActive: user.isActive,
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt
+        };
 
         return res.status(200).json({
           success: true,
           message: 'Login successful!',
           data: {
-            user,
+            user: userResponse,
             token
           }
         });
@@ -154,7 +200,12 @@ export const login = async (req, res) => {
       });
     }
 
-    const token = 'mock-token-' + Date.now();
+    // ✅ REAL JWT TOKEN even for mock users
+    const token = jwt.sign(
+      { id: user.id },
+      process.env.JWT_SECRET,
+      { expiresIn: '30d' }
+    );
 
     res.status(200).json({
       success: true,
@@ -176,17 +227,11 @@ export const login = async (req, res) => {
 
 export const getMe = async (req, res) => {
   try {
-    // This would normally get user from token
-    // For now, return a mock response
+    // User is already attached to req by the protect middleware
     res.status(200).json({
       success: true,
       data: {
-        user: {
-          id: 'user-id',
-          name: 'Test User',
-          email: 'test@example.com',
-          role: 'customer'
-        }
+        user: req.user
       }
     });
   } catch (error) {

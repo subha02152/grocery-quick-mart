@@ -5,12 +5,14 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 
 // Load environment variables
 dotenv.config();
 
 console.log('🔧 Environment check:');
 console.log('MONGODB_URI:', process.env.MONGODB_URI ? '✅ Found' : '❌ Missing');
+console.log('JWT_SECRET:', process.env.JWT_SECRET ? '✅ Found' : '❌ Missing');
 console.log('PORT:', process.env.PORT);
 
 const app = express();
@@ -137,34 +139,73 @@ const orderSchema = new mongoose.Schema({
 
 const Order = mongoose.model('Order', orderSchema);
 
-// FIXED Auth middleware - creates real user instead of fake ID
+// ========================
+// REAL JWT AUTH MIDDLEWARE
+// ========================
+
+// Universal JWT protect middleware
 const protect = async (req, res, next) => {
   try {
-    // For demo purposes, create/find a real user instead of using fake ID
-    let user = await User.findOne({ email: 'customer@example.com' });
-    
-    if (!user) {
-      // Create a default customer if doesn't exist
-      const hashedPassword = await bcrypt.hash('password123', 12);
-      user = await User.create({
-        name: 'Demo Customer',
-        email: 'customer@example.com',
-        password: hashedPassword,
-        phone: '+1234567890',
-        address: '123 Customer Street, City',
-        role: 'customer'
+    let token;
+
+    // Check for token in Authorization header
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+      token = req.headers.authorization.split(' ')[1];
+    }
+
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: 'Not authorized, no token provided'
       });
     }
-    
-    // Use the REAL user from database
-    req.user = { 
+
+    // Verify token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production');
+
+    // Get user from token
+    const user = await User.findById(decoded.id).select('-password');
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    if (!user.isActive) {
+      return res.status(401).json({
+        success: false,
+        message: 'User account is deactivated'
+      });
+    }
+
+    // Attach user to request
+    req.user = {
       id: user._id,
-      role: user.role
+      role: user.role,
+      email: user.email,
+      name: user.name
     };
-    
+
     next();
   } catch (error) {
     console.error('Auth middleware error:', error);
+    
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid token'
+      });
+    }
+    
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({
+        success: false,
+        message: 'Token expired'
+      });
+    }
+
     return res.status(401).json({
       success: false,
       message: 'Not authorized'
@@ -172,68 +213,26 @@ const protect = async (req, res, next) => {
   }
 };
 
-// Shop owner protect middleware
-const protectShopOwner = async (req, res, next) => {
-  try {
-    // For shop owners, create/find a real user
-    let user = await User.findOne({ email: 'shop@example.com' });
-    
-    if (!user) {
-      const hashedPassword = await bcrypt.hash('password123', 12);
-      user = await User.create({
-        name: 'Shop Owner',
-        email: 'shop@example.com',
-        password: hashedPassword,
-        phone: '+1234567890',
-        address: '123 Shop Street, City',
-        role: 'shop_owner'
+// Role-based middleware
+const authorizeRoles = (...roles) => {
+  return (req, res, next) => {
+    if (!req.user || !roles.includes(req.user.role)) {
+      return res.status(403).json({
+        success: false,
+        message: `Role ${req.user?.role || 'unknown'} is not authorized to access this resource`
       });
     }
-    
-    req.user = { 
-      id: user._id
-    };
-    
     next();
-  } catch (error) {
-    return res.status(401).json({
-      success: false,
-      message: 'Not authorized'
-    });
-  }
+  };
 };
 
-// Delivery agent protect middleware
-const protectDeliveryAgent = async (req, res, next) => {
-  try {
-    // For delivery agents, create/find a real user
-    let user = await User.findOne({ email: 'delivery@example.com' });
-    
-    if (!user) {
-      const hashedPassword = await bcrypt.hash('password123', 12);
-      user = await User.create({
-        name: 'Delivery Agent',
-        email: 'delivery@example.com',
-        password: hashedPassword,
-        phone: '+1234567890',
-        address: '123 Delivery Street, City',
-        role: 'delivery_agent'
-      });
-    }
-    
-    req.user = { 
-      id: user._id,
-      role: user.role
-    };
-    
-    next();
-  } catch (error) {
-    console.error('Delivery agent auth error:', error);
-    return res.status(401).json({
-      success: false,
-      message: 'Not authorized'
-    });
-  }
+// Helper function to generate JWT token
+const generateToken = (userId) => {
+  return jwt.sign(
+    { id: userId },
+    process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+    { expiresIn: '30d' }
+  );
 };
 
 // ========================
@@ -339,10 +338,11 @@ app.get('/api/customer/shops/:shopId/products', async (req, res) => {
   }
 });
 
-// Create order route
+// Create order route - NOW WITH REAL AUTH
 app.post('/api/customer/orders', protect, async (req, res) => {
   try {
     console.log('📦 Creating order with data:', req.body);
+    console.log('👤 Authenticated user:', req.user);
     
     const { shopId, items, totalAmount, deliveryAddress, paymentMethod } = req.body;
 
@@ -354,14 +354,7 @@ app.post('/api/customer/orders', protect, async (req, res) => {
       });
     }
 
-    if (!req.user || !req.user.id) {
-      return res.status(401).json({
-        success: false,
-        message: 'Please login to place order'
-      });
-    }
-
-    // Get user details
+    // Get user details from authenticated user
     const user = await User.findById(req.user.id);
     if (!user) {
       return res.status(404).json({
@@ -393,10 +386,10 @@ app.post('/api/customer/orders', protect, async (req, res) => {
     const orderNumber = `ORD-${Date.now()}`;
     console.log(`🔢 Generated order number: ${orderNumber}`);
 
-    // Create order
+    // Create order with REAL user ID
     const order = new Order({
       orderNumber: orderNumber,
-      customerId: user._id,
+      customerId: user._id, // ✅ REAL USER ID FROM JWT
       customerName: user.name,
       customerPhone: user.phone,
       customerEmail: user.email,
@@ -447,7 +440,7 @@ app.post('/api/customer/orders', protect, async (req, res) => {
       updatedAt: order.updatedAt.toISOString()
     };
 
-    console.log('🎉 Order created successfully!');
+    console.log('🎉 Order created successfully for user:', user.email);
 
     res.status(201).json({
       success: true,
@@ -465,20 +458,17 @@ app.post('/api/customer/orders', protect, async (req, res) => {
   }
 });
 
-// Get customer orders
+// Get customer orders - NOW WITH REAL AUTH
 app.get('/api/customer/orders', protect, async (req, res) => {
   try {
-    if (!req.user || !req.user.id) {
-      return res.status(401).json({
-        success: false,
-        message: 'Please login to view orders'
-      });
-    }
+    console.log('📋 Fetching orders for user:', req.user.id);
 
     const orders = await Order.find({ customerId: req.user.id })
       .populate('shopId', 'name phone address')
       .sort({ createdAt: -1 })
       .lean();
+
+    console.log(`✅ Found ${orders.length} orders for user`);
 
     // Convert to frontend format
     const formattedOrders = orders.map(order => ({
@@ -556,6 +546,9 @@ app.post('/api/auth/register', async (req, res) => {
       role: role || 'customer'
     });
 
+    // Generate JWT token
+    const token = generateToken(newUser._id);
+
     // Remove password from response
     const userResponse = { 
       id: newUser._id.toString(),
@@ -570,8 +563,7 @@ app.post('/api/auth/register', async (req, res) => {
       updatedAt: newUser.updatedAt.toISOString()
     };
 
-    // Mock token
-    const token = 'jwt-token-' + Date.now();
+    console.log('✅ User registered successfully:', newUser.email);
 
     res.status(201).json({
       success: true,
@@ -617,6 +609,9 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
 
+    // Generate JWT token
+    const token = generateToken(user._id);
+
     // Remove password from response
     const userResponse = { 
       id: user._id.toString(),
@@ -631,8 +626,7 @@ app.post('/api/auth/login', async (req, res) => {
       updatedAt: user.updatedAt.toISOString()
     };
 
-    // Mock token
-    const token = 'jwt-token-' + Date.now();
+    console.log('✅ User logged in successfully:', user.email);
 
     res.status(200).json({
       success: true,
@@ -656,7 +650,7 @@ app.post('/api/auth/login', async (req, res) => {
 // SHOP OWNER ROUTES
 // ========================
 
-app.get('/api/shops', protectShopOwner, async (req, res) => {
+app.get('/api/shops', protect, authorizeRoles('shop_owner'), async (req, res) => {
   try {
     const shop = await Shop.findOne({ ownerId: req.user.id });
     
@@ -704,7 +698,7 @@ app.get('/api/shops', protectShopOwner, async (req, res) => {
   }
 });
 
-app.post('/api/shops', protectShopOwner, async (req, res) => {
+app.post('/api/shops', protect, authorizeRoles('shop_owner'), async (req, res) => {
   try {
     const { name, description, address, phone, email, isOpen, openingHours } = req.body;
     
@@ -783,7 +777,7 @@ app.post('/api/shops', protectShopOwner, async (req, res) => {
   }
 });
 
-app.get('/api/shops/stats', protectShopOwner, async (req, res) => {
+app.get('/api/shops/stats', protect, authorizeRoles('shop_owner'), async (req, res) => {
   try {
     const shop = await Shop.findOne({ ownerId: req.user.id });
     
@@ -839,7 +833,7 @@ app.get('/api/shops/stats', protectShopOwner, async (req, res) => {
 // PRODUCT ROUTES
 // ========================
 
-app.get('/api/products', protectShopOwner, async (req, res) => {
+app.get('/api/products', protect, authorizeRoles('shop_owner'), async (req, res) => {
   try {
     const shop = await Shop.findOne({ ownerId: req.user.id });
     
@@ -893,7 +887,7 @@ app.get('/api/products', protectShopOwner, async (req, res) => {
   }
 });
 
-app.post('/api/products', protectShopOwner, async (req, res) => {
+app.post('/api/products', protect, authorizeRoles('shop_owner'), async (req, res) => {
   try {
     const shop = await Shop.findOne({ ownerId: req.user.id });
     
@@ -954,7 +948,7 @@ app.post('/api/products', protectShopOwner, async (req, res) => {
   }
 });
 
-app.put('/api/products/:id', protectShopOwner, async (req, res) => {
+app.put('/api/products/:id', protect, authorizeRoles('shop_owner'), async (req, res) => {
   try {
     const { id } = req.params;
     const shop = await Shop.findOne({ ownerId: req.user.id });
@@ -1015,7 +1009,7 @@ app.put('/api/products/:id', protectShopOwner, async (req, res) => {
   }
 });
 
-app.delete('/api/products/:id', protectShopOwner, async (req, res) => {
+app.delete('/api/products/:id', protect, authorizeRoles('shop_owner'), async (req, res) => {
   try {
     const { id } = req.params;
     const shop = await Shop.findOne({ ownerId: req.user.id });
@@ -1053,7 +1047,7 @@ app.delete('/api/products/:id', protectShopOwner, async (req, res) => {
 // ORDER ROUTES (Shop Owner)
 // ========================
 
-app.get('/api/orders', protectShopOwner, async (req, res) => {
+app.get('/api/orders', protect, authorizeRoles('shop_owner'), async (req, res) => {
   try {
     const shop = await Shop.findOne({ ownerId: req.user.id });
     
@@ -1121,7 +1115,7 @@ app.get('/api/orders', protectShopOwner, async (req, res) => {
   }
 });
 
-app.put('/api/orders/:id/status', protectShopOwner, async (req, res) => {
+app.put('/api/orders/:id/status', protect, authorizeRoles('shop_owner'), async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
@@ -1190,7 +1184,7 @@ app.put('/api/orders/:id/status', protectShopOwner, async (req, res) => {
   }
 });
 
-app.get('/api/orders/stats', protectShopOwner, async (req, res) => {
+app.get('/api/orders/stats', protect, authorizeRoles('shop_owner'), async (req, res) => {
   try {
     const shop = await Shop.findOne({ ownerId: req.user.id });
     
@@ -1240,11 +1234,11 @@ app.get('/api/orders/stats', protectShopOwner, async (req, res) => {
 });
 
 // ========================
-// DELIVERY AGENT ROUTES - FIXED
+// DELIVERY AGENT ROUTES
 // ========================
 
 // Get assigned deliveries (dispatched orders)
-app.get('/api/delivery/assigned-orders', protectDeliveryAgent, async (req, res) => {
+app.get('/api/delivery/assigned-orders', protect, authorizeRoles('delivery_agent'), async (req, res) => {
   try {
     console.log('📦 Fetching assigned orders from MongoDB...');
     
@@ -1268,7 +1262,7 @@ app.get('/api/delivery/assigned-orders', protectDeliveryAgent, async (req, res) 
       customerEmail: order.customerEmail,
       deliveryAddress: order.deliveryAddress,
       shopId: order.shopId._id.toString(),
-      shopName: order.shopId.name, // ✅ FIXED: shopName now included
+      shopName: order.shopId.name,
       items: order.items.map(item => ({
         productId: item.productId.toString(),
         name: item.name,
@@ -1302,7 +1296,7 @@ app.get('/api/delivery/assigned-orders', protectDeliveryAgent, async (req, res) 
 });
 
 // Get completed deliveries (delivered orders)
-app.get('/api/delivery/completed-orders', protectDeliveryAgent, async (req, res) => {
+app.get('/api/delivery/completed-orders', protect, authorizeRoles('delivery_agent'), async (req, res) => {
   try {
     console.log('📦 Fetching completed orders from MongoDB...');
     
@@ -1326,7 +1320,7 @@ app.get('/api/delivery/completed-orders', protectDeliveryAgent, async (req, res)
       customerEmail: order.customerEmail,
       deliveryAddress: order.deliveryAddress,
       shopId: order.shopId._id.toString(),
-      shopName: order.shopId.name, // ✅ FIXED: shopName now included
+      shopName: order.shopId.name,
       items: order.items.map(item => ({
         productId: item.productId.toString(),
         name: item.name,
@@ -1360,7 +1354,7 @@ app.get('/api/delivery/completed-orders', protectDeliveryAgent, async (req, res)
 });
 
 // Mark order as delivered
-app.put('/api/delivery/orders/:id/deliver', protectDeliveryAgent, async (req, res) => {
+app.put('/api/delivery/orders/:id/deliver', protect, authorizeRoles('delivery_agent'), async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -1378,7 +1372,7 @@ app.put('/api/delivery/orders/:id/deliver', protectDeliveryAgent, async (req, re
       id,
       { 
         status: 'delivered',
-        paymentStatus: 'paid', // Mark payment as paid when delivered
+        paymentStatus: 'paid',
         updatedAt: new Date()
       },
       { new: true }
@@ -1451,7 +1445,7 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Get all users
+// Get all users (admin only - add proper auth later)
 app.get('/api/users', async (req, res) => {
   try {
     const users = await User.find({}, { password: 0 }).lean();
@@ -1631,6 +1625,7 @@ const startServer = async () => {
     
     app.listen(PORT, () => {
       console.log(`✅ Server running on port ${PORT}`);
+      console.log(`🔐 JWT Authentication enabled`);
       console.log(`🌐 Health check: http://localhost:${PORT}/api/health`);
       console.log(`🛍️ Customer routes: http://localhost:${PORT}/api/customer/shops`);
       console.log(`🏪 Shop owner routes: http://localhost:${PORT}/api/shops`);
