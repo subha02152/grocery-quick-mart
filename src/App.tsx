@@ -8,6 +8,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import CustomerDashboard from './pages/customer/CustomerDashboard';
 import ShopOwnerDashboard from './pages/shop/ShopOwnerDashboard';
+import DeliveryAgentDashboard from './pages/delivery/DeliveryAgentDashboard'; // ✅ ADD THIS IMPORT
 
 import ProtectedRoute from './components/ProtectedRoute';
 
@@ -42,7 +43,15 @@ function App() {
             }
           />
 
-       
+          {/* ✅ ADD THIS DELIVERY ROUTE */}
+          <Route
+            path="/delivery"
+            element={
+              <ProtectedRoute allowedRoles={['delivery_agent']}>
+                <DeliveryAgentDashboard />
+              </ProtectedRoute>
+            }
+          />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Package, Clock } from 'lucide-react';
 import { Order, Shop } from '../../types';
 import { toast } from '../../utils/toast';
-import { orderAPI } from '../../utils/api';
+import { orderAPI, shopAPI } from '../../utils/api'; // ✅ Import both APIs
 
 const ShopOrders = () => {
   const [shop, setShop] = useState<Shop | null>(null);
@@ -16,9 +16,11 @@ const ShopOrders = () => {
   const fetchShopAndOrders = async () => {
     try {
       setLoading(true);
+      
+      // ✅ FIXED: Use shopAPI for shop details, orderAPI for orders
       const [shopResponse, ordersResponse] = await Promise.all([
-        orderAPI.getShop(),
-        orderAPI.getOrders()
+        shopAPI.getShop(),     // ✅ CORRECT - get shop details from shopAPI
+        orderAPI.getOrders()   // ✅ CORRECT - get orders for this shop from orderAPI
       ]);
 
       if (shopResponse.success) {
@@ -30,6 +32,7 @@ const ShopOrders = () => {
       }
     } catch (error: any) {
       console.error('Fetch error:', error);
+      toast.error('Failed to load shop orders');
     } finally {
       setLoading(false);
     }

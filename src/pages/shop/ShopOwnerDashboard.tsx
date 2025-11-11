@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Store, Package, ShoppingBag } from 'lucide-react';
+import { Store, Package, ShoppingBag, Truck } from 'lucide-react';
 import ShopManagement from '../../components/shop/ShopManagement';
 import ProductManagement from '../../components/shop/ProductManagement';
 import ShopOrders from '../../components/shop/ShopOrders';
+import DeliveryManagement from '../../components/shop/DeliveryManagement'; // You'll need to create this
 
-type View = 'shop' | 'products' | 'orders';
+type View = 'shop' | 'products' | 'orders' | 'delivery';
 
 const ShopOwnerDashboard = () => {
   const [currentView, setCurrentView] = useState<View>('shop');
@@ -17,7 +18,7 @@ const ShopOwnerDashboard = () => {
             Shop Owner Dashboard
           </h1>
           <p className="text-gray-600">
-            Manage your shop, products, and orders
+            Manage your shop, products, orders, and deliveries
           </p>
         </div>
 
@@ -55,12 +56,24 @@ const ShopOwnerDashboard = () => {
             <ShoppingBag className="h-5 w-5 mr-2" />
             Orders
           </button>
+          <button
+            onClick={() => setCurrentView('delivery')}
+            className={`flex items-center px-4 py-2 rounded-lg font-medium transition ${
+              currentView === 'delivery'
+                ? 'bg-blue-600 text-white'
+                : 'bg-white text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            <Truck className="h-5 w-5 mr-2" />
+            Delivery
+          </button>
         </div>
 
         <div className="bg-white rounded-lg shadow-md p-6">
           {currentView === 'shop' && <ShopManagement />}
           {currentView === 'products' && <ProductManagement />}
           {currentView === 'orders' && <ShopOrders />}
+          {currentView === 'delivery' && <DeliveryManagement />}
         </div>
       </div>
     </div>

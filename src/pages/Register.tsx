@@ -14,7 +14,7 @@ const Register = () => {
     password: '',
     phone: '',
     address: '',
-    role: 'customer' as 'customer' | 'shop_owner' ,
+    role: 'customer' as 'customer' | 'shop_owner' | 'delivery_agent',
   });
   const [loading, setLoading] = useState(false);
 
@@ -41,8 +41,14 @@ const Register = () => {
         
         toast.success(response.message);
         
-        // Navigate to the appropriate dashboard
-        navigate(`/dashboard/${response.data.user.role}`);
+        // ✅ FIXED: Navigate to correct paths based on role
+        if (response.data.user.role === 'customer') {
+          navigate('/customer');
+        } else if (response.data.user.role === 'shop_owner') {
+          navigate('/shop');
+        } else if (response.data.user.role === 'delivery_agent') {
+          navigate('/delivery');  // ✅ This matches your folder structure
+        }
       }
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || error.message || 'Registration failed. Please try again.';
@@ -82,7 +88,7 @@ const Register = () => {
             >
               <option value="customer">Customer</option>
               <option value="shop_owner">Shop Owner</option>
-              
+              <option value="delivery_agent">Delivery Agent</option>
             </select>
           </div>
 
@@ -205,8 +211,6 @@ const Register = () => {
             {loading ? 'Creating Account...' : 'Register'}
           </button>
         </form>
-
-        
 
         <div className="mt-6 text-center">
           <p className="text-gray-600">
