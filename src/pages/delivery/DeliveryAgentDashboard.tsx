@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { Truck, CheckCircle } from 'lucide-react';
+import { Truck, CheckCircle, UserPlus } from 'lucide-react';
 import AssignedDeliveries from '../../components/delivery/AssignedDeliveries';
 import CompletedDeliveries from '../../components/delivery/CompletedDeliveries';
+// @ts-ignore: no declaration file for CreateDeliveryAccount.jsx
+import CreateDeliveryAccount from '../../components/delivery/CreateDeliveryAccount';
 
-type View = 'assigned' | 'completed';
+type View = 'assigned' | 'completed' | 'create-account';
 
 const DeliveryAgentDashboard = () => {
   const [currentView, setCurrentView] = useState<View>('assigned');
@@ -41,11 +43,23 @@ const DeliveryAgentDashboard = () => {
             <CheckCircle className="h-5 w-5 mr-2" />
             Completed Deliveries
           </button>
+          <button
+            onClick={() => setCurrentView('create-account')}
+            className={`flex items-center px-4 py-2 rounded-lg font-medium transition ${
+              currentView === 'create-account'
+                ? 'bg-orange-600 text-white'
+                : 'bg-white text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            <UserPlus className="h-5 w-5 mr-2" />
+            Create Delivery Account
+          </button>
         </div>
 
         <div className="bg-white rounded-lg shadow-md p-6">
           {currentView === 'assigned' && <AssignedDeliveries />}
           {currentView === 'completed' && <CompletedDeliveries />}
+          {currentView === 'create-account' && <CreateDeliveryAccount />}
         </div>
       </div>
     </div>

@@ -69,17 +69,34 @@ const orderSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'confirmed', 'packed', 'dispatched', 'delivered', 'cancelled'],
+    enum: [
+      'pending',
+      'confirmed',
+      'packed',
+      'dispatched',
+      'delivered',
+      'cancelled'
+    ],
     default: 'pending'
   },
   paymentStatus: {
     type: String,
-    enum: ['pending', 'paid', 'failed', 'refunded'],
+    enum: [
+      'pending',
+      'paid',
+      'failed',
+      'refunded'
+    ],
     default: 'pending'
   },
   paymentMethod: {
     type: String,
-    enum: ['cash', 'card', 'upi', 'wallet'],
+    enum: [
+      'cash',
+      'card',
+      'upi',
+      'wallet'
+    ],
     default: 'cash'
   },
   deliveryInstructions: {
@@ -91,6 +108,9 @@ const orderSchema = new mongoose.Schema({
   deliveryAgentId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
+  },
+  deliveredAt: {
+    type: Date
   },
   rating: {
     type: Number,

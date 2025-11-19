@@ -151,10 +151,11 @@ export interface User extends BaseEntity {
   isPhoneVerified?: boolean;
   avatar?: string;
   
-  // Delivery agent specific fields
+  // ✅ UPDATED DELIVERY AGENT FIELDS
   vehicleType?: string;
   vehicleNumber?: string;
   licenseNumber?: string;
+  agencyName?: string; // Added this missing field
   isOnline?: boolean;
   currentLocation?: {
     latitude: number;
@@ -165,6 +166,7 @@ export interface User extends BaseEntity {
   shopId?: string;
 }
 
+// ✅ You can keep DeliveryAgent interface for future use or remove it
 export interface DeliveryAgent {
   id: string;
   _id?: string;
@@ -175,6 +177,7 @@ export interface DeliveryAgent {
   vehicleType: string;
   vehicleNumber: string;
   licenseNumber: string;
+  agencyName?: string; // Added this missing field
   isOnline: boolean;
   isAvailable: boolean;
   currentLocation?: {
@@ -215,5 +218,24 @@ export interface ProductsResponse {
 
 export interface ShopsResponse {
   shops: Shop[];
-  pagination?: ApiResponse['pagination'];
+  pagination?: ApiResponse['pagination']; // Fixed the typo here
+}
+
+// ✅ ADDED: Delivery Account Creation Type
+export interface DeliveryAccountData {
+  agencyName: string;
+  address: string;
+  licenseNumber: string;
+  mobileNumber: string;
+  vehicleType: string;
+  vehicleNumber: string;
+}
+
+// ✅ ADDED: User with Delivery Agent Fields
+export interface UserWithDelivery extends User {
+  licenseNumber?: string;
+  vehicleType?: string;
+  vehicleNumber?: string;
+  agencyName?: string;
+  isOnline?: boolean;
 }

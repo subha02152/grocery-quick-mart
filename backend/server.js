@@ -37,7 +37,9 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// User Schema
+// ========================
+// UPDATED USER SCHEMA
+// ========================
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
@@ -45,7 +47,13 @@ const userSchema = new mongoose.Schema({
   phone: { type: String, required: true },
   address: { type: String, required: true },
   role: { type: String, enum: ['customer', 'shop_owner', 'delivery_agent'], default: 'customer' },
-  isActive: { type: Boolean, default: true }
+  isActive: { type: Boolean, default: true },
+  // ✅ ADDED DELIVERY AGENT FIELDS
+  licenseNumber: { type: String, unique: true, sparse: true },
+  vehicleType: { type: String },
+  vehicleNumber: { type: String, unique: true, sparse: true },
+  agencyName: { type: String },
+  isOnline: { type: Boolean, default: false }
 }, {
   timestamps: true
 });
@@ -1234,13 +1242,116 @@ app.get('/api/orders/stats', protect, authorizeRoles('shop_owner'), async (req, 
 });
 
 // ========================
-// DELIVERY AGENT ROUTES
+// UPDATED DELIVERY AGENT ROUTES
 // ========================
 
-// Get assigned deliveries (dispatched orders)
+// ✅ Create delivery account
+app.post('/api/delivery/create-account', protect, authorizeRoles('delivery_agent'), async (req, res) => {
+  try {
+    const {
+      agencyName,
+      address,
+      licenseNumber,
+      mobileNumber,
+      vehicleType,
+      vehicleNumber
+    } = req.body;
+
+    console.log('🚚 Creating delivery account for user:', req.user.id);
+
+    // Check if delivery account already exists for this user
+    const existingUser = await User.findById(req.user.id);
+    
+    if (existingUser.licenseNumber || existingUser.vehicleNumber) {
+      return res.status(400).json({
+        success: false,
+        message: 'Delivery account already exists for this user'
+      });
+    }
+
+    // Check if license number or vehicle number already exists
+    const existingLicense = await User.findOne({ licenseNumber });
+    if (existingLicense) {
+      return res.status(400).json({
+        success: false,
+        message: 'License number already exists'
+      });
+    }
+
+    const existingVehicle = await User.findOne({ vehicleNumber });
+    if (existingVehicle) {
+      return res.status(400).json({
+        success: false,
+        message: 'Vehicle number already exists'
+      });
+    }
+
+    // Update user with delivery agent details
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user.id,
+      {
+        licenseNumber,
+        vehicleType,
+        vehicleNumber,
+        agencyName,
+        address: address || existingUser.address,
+        phone: mobileNumber || existingUser.phone
+      },
+      { new: true }
+    ).select('-password');
+
+    console.log('✅ Delivery account created successfully for:', updatedUser.email);
+
+    res.status(201).json({
+      success: true,
+      message: 'Delivery account created successfully!',
+      data: {
+        user: {
+          id: updatedUser._id.toString(),
+          _id: updatedUser._id.toString(),
+          name: updatedUser.name,
+          email: updatedUser.email,
+          phone: updatedUser.phone,
+          address: updatedUser.address,
+          role: updatedUser.role,
+          licenseNumber: updatedUser.licenseNumber,
+          vehicleType: updatedUser.vehicleType,
+          vehicleNumber: updatedUser.vehicleNumber,
+          agencyName: updatedUser.agencyName,
+          isActive: updatedUser.isActive,
+          createdAt: updatedUser.createdAt.toISOString(),
+          updatedAt: updatedUser.updatedAt.toISOString()
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Create delivery account error:', error);
+    
+    // Handle duplicate key errors
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      const message = field === 'licenseNumber' 
+        ? 'License number already exists' 
+        : 'Vehicle number already exists';
+      
+      return res.status(400).json({
+        success: false,
+        message
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Server error while creating delivery account: ' + error.message
+    });
+  }
+});
+
+// ✅ Get assigned deliveries (dispatched orders)
 app.get('/api/delivery/assigned-orders', protect, authorizeRoles('delivery_agent'), async (req, res) => {
   try {
-    console.log('📦 Fetching assigned orders from MongoDB...');
+    console.log('📦 Fetching assigned orders for delivery agent:', req.user.id);
     
     const orders = await Order.find({ 
       status: 'dispatched'
@@ -1295,10 +1406,10 @@ app.get('/api/delivery/assigned-orders', protect, authorizeRoles('delivery_agent
   }
 });
 
-// Get completed deliveries (delivered orders)
+// ✅ Get completed deliveries (delivered orders)
 app.get('/api/delivery/completed-orders', protect, authorizeRoles('delivery_agent'), async (req, res) => {
   try {
-    console.log('📦 Fetching completed orders from MongoDB...');
+    console.log('📦 Fetching completed orders for delivery agent:', req.user.id);
     
     const orders = await Order.find({ 
       status: 'delivered'
@@ -1353,12 +1464,12 @@ app.get('/api/delivery/completed-orders', protect, authorizeRoles('delivery_agen
   }
 });
 
-// Mark order as delivered
+// ✅ Mark order as delivered
 app.put('/api/delivery/orders/:id/deliver', protect, authorizeRoles('delivery_agent'), async (req, res) => {
   try {
     const { id } = req.params;
 
-    console.log(`📦 Marking order ${id} as delivered...`);
+    console.log(`📦 Marking order ${id} as delivered by agent:`, req.user.id);
 
     // Validate order ID
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -1387,7 +1498,7 @@ app.put('/api/delivery/orders/:id/deliver', protect, authorizeRoles('delivery_ag
       });
     }
 
-    console.log(`✅ Order ${order.orderNumber} marked as delivered`);
+    console.log(`✅ Order ${order.orderNumber} marked as delivered by agent:`, req.user.id);
 
     const formattedOrder = {
       id: order._id.toString(),

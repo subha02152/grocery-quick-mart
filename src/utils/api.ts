@@ -293,6 +293,67 @@ export const orderAPI = {
 };
 
 // ========================
+// UPDATED DELIVERY API FUNCTIONS
+// ========================
+
+export const deliveryAPI = {
+  // ✅ Create delivery account
+  createDeliveryAccount: async (accountData: {
+    agencyName: string;
+    address: string;
+    licenseNumber: string;
+    mobileNumber: string;
+    vehicleType: string;
+    vehicleNumber: string;
+  }) => {
+    const response = await api.post('/api/delivery/create-account', accountData);
+    return response.data;
+  },
+
+  // ✅ Get assigned orders (dispatched orders)
+  getAssignedOrders: async () => {
+    const response = await api.get('/api/delivery/assigned-orders');
+    return response.data;
+  },
+
+  // ✅ Get completed orders (delivered orders)
+  getCompletedOrders: async () => {
+    const response = await api.get('/api/delivery/completed-orders');
+    return response.data;
+  },
+
+  // ✅ Mark order as delivered
+  markAsDelivered: async (orderId: string) => {
+    const response = await api.put(`/api/delivery/orders/${orderId}/deliver`);
+    return response.data;
+  },
+
+  // Get delivery orders
+  getDeliveryOrders: async () => {
+    const response = await api.get('/api/delivery/orders');
+    return response.data;
+  },
+
+  // Accept delivery order
+  acceptOrder: async (orderId: string) => {
+    const response = await api.put(`/api/delivery/orders/${orderId}/accept`);
+    return response.data;
+  },
+
+  // Update delivery status
+  updateDeliveryStatus: async (orderId: string, status: string) => {
+    const response = await api.put(`/api/delivery/orders/${orderId}/status`, { status });
+    return response.data;
+  },
+
+  // Get delivery history
+  getDeliveryHistory: async () => {
+    const response = await api.get('/api/delivery/history');
+    return response.data;
+  }
+};
+
+// ========================
 // UTILITY API FUNCTIONS
 // ========================
 
@@ -330,54 +391,6 @@ export const utilityAPI = {
   // Get all users (for testing)
   getAllUsers: async () => {
     const response = await api.get('/api/users');
-    return response.data;
-  }
-};
-
-// ========================
-// DELIVERY API FUNCTIONS
-// ========================
-
-export const deliveryAPI = {
-  // Get assigned orders (dispatched orders)
-  getAssignedOrders: async () => {
-    const response = await api.get('/api/delivery/assigned-orders');
-    return response.data;
-  },
-
-  // Get completed orders (delivered orders)
-  getCompletedOrders: async () => {
-    const response = await api.get('/api/delivery/completed-orders');
-    return response.data;
-  },
-
-  // Mark order as delivered
-  markAsDelivered: async (orderId: string) => {
-    const response = await api.put(`/api/delivery/orders/${orderId}/deliver`);
-    return response.data;
-  },
-
-  // Get delivery orders
-  getDeliveryOrders: async () => {
-    const response = await api.get('/api/delivery/orders');
-    return response.data;
-  },
-
-  // Accept delivery order
-  acceptOrder: async (orderId: string) => {
-    const response = await api.put(`/api/delivery/orders/${orderId}/accept`);
-    return response.data;
-  },
-
-  // Update delivery status
-  updateDeliveryStatus: async (orderId: string, status: string) => {
-    const response = await api.put(`/api/delivery/orders/${orderId}/status`, { status });
-    return response.data;
-  },
-
-  // Get delivery history
-  getDeliveryHistory: async () => {
-    const response = await api.get('/api/delivery/history');
     return response.data;
   }
 };
