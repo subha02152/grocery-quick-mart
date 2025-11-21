@@ -140,6 +140,11 @@ const orderSchema = new mongoose.Schema({
     type: String,
     enum: ['cash', 'card', 'upi', 'wallet'],
     default: 'cash'
+  },
+  // ✅ ADDED DELIVERY AGENT FIELD
+  deliveryAgentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
   }
 }, {
   timestamps: true
@@ -1237,6 +1242,162 @@ app.get('/api/orders/stats', protect, authorizeRoles('shop_owner'), async (req, 
     res.status(500).json({
       success: false,
       message: 'Error fetching order statistics'
+    });
+  }
+});
+
+// ========================
+// DELIVERY MANAGEMENT ROUTES (For Delivery Management Page)
+// ========================
+
+// ✅ GET ALL DELIVERY AGENTS (For Delivery Management Page)
+app.get('/api/delivery/agents', protect, async (req, res) => {
+  try {
+    console.log('🚚 Fetching delivery agents for delivery management');
+    
+    // Get all users with delivery_agent role
+    const agents = await User.find({ 
+      role: 'delivery_agent'
+    })
+    .select('-password')
+    .lean();
+
+    console.log(`✅ Found ${agents.length} delivery agents`);
+
+    // Transform data to match React component expectations
+    const formattedAgents = agents.map(agent => ({
+      id: agent._id.toString(),
+      _id: agent._id.toString(),
+      name: agent.name,
+      email: agent.email,
+      phone: agent.phone,
+      address: agent.address,
+      agencyName: agent.agencyName,
+      licenseNumber: agent.licenseNumber,
+      vehicleNumber: agent.vehicleNumber,
+      vehicleType: agent.vehicleType,
+      isActive: agent.isActive !== undefined ? agent.isActive : true,
+      isOnline: agent.isOnline !== undefined ? agent.isOnline : false,
+      isAvailable: true, // Default to available
+      currentLocation: agent.address, // Use address as location
+      rating: 4.5, // Default rating
+      totalDeliveries: 0 // Start with 0 deliveries
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: {
+        agents: formattedAgents
+      }
+    });
+  } catch (error) {
+    console.error('❌ Get delivery agents error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching delivery agents'
+    });
+  }
+});
+
+// ✅ GET ORDERS WITH STATUS FILTER (For Delivery Management)
+app.get('/api/delivery/orders', protect, async (req, res) => {
+  try {
+    const { status } = req.query;
+    console.log('📦 Fetching orders for delivery management with status:', status);
+    
+    // Build filter
+    const filter = {};
+    if (status && status !== 'all') {
+      filter.status = status;
+    }
+
+    const orders = await Order.find(filter)
+      .populate('customerId', 'name phone email')
+      .populate('shopId', 'name address phone')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    console.log(`✅ Found ${orders.length} orders with status: ${status}`);
+
+    // Transform to match React component
+    const formattedOrders = orders.map(order => ({
+      id: order._id.toString(),
+      _id: order._id.toString(),
+      orderNumber: order.orderNumber,
+      status: order.status,
+      totalAmount: order.totalAmount,
+      customerName: order.customerId?.name || order.customerName,
+      customerPhone: order.customerId?.phone || order.customerPhone,
+      deliveryAddress: order.deliveryAddress,
+      items: order.items.map(item => ({
+        name: item.name,
+        quantity: item.quantity,
+        unit: item.unit,
+        price: item.price
+      })),
+      createdAt: order.createdAt.toISOString(),
+      deliveryAgentId: order.deliveryAgentId?.toString() || null
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: {
+        orders: formattedOrders
+      }
+    });
+  } catch (error) {
+    console.error('❌ Get delivery orders error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching orders for delivery management'
+    });
+  }
+});
+
+// ✅ ASSIGN ORDER TO DELIVERY AGENT
+app.post('/api/delivery/assign', protect, async (req, res) => {
+  try {
+    const { orderId, agentId } = req.body;
+    console.log(`📦 Assigning order ${orderId} to agent ${agentId}`);
+
+    // Validate
+    if (!orderId || !agentId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Order ID and Agent ID are required'
+      });
+    }
+
+    // Update order
+    const order = await Order.findByIdAndUpdate(
+      orderId,
+      { 
+        status: 'dispatched',
+        deliveryAgentId: agentId,
+        updatedAt: new Date()
+      },
+      { new: true }
+    );
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    console.log(`✅ Order ${order.orderNumber} assigned to agent ${agentId}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Order assigned successfully!',
+      data: { order }
+    });
+  } catch (error) {
+    console.error('❌ Assign order error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error assigning order'
     });
   }
 });

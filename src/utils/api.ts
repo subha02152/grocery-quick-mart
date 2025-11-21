@@ -297,6 +297,24 @@ export const orderAPI = {
 // ========================
 
 export const deliveryAPI = {
+  // ✅ ADDED: Get all delivery agents (for delivery management page)
+  getDeliveryAgents: async () => {
+    const response = await api.get('/api/delivery/agents');
+    return response.data;
+  },
+
+  // ✅ ADDED: Assign order to delivery agent
+  assignOrderToAgent: async (orderId: string, agentId: string) => {
+    const response = await api.post('/api/delivery/assign', { orderId, agentId });
+    return response.data;
+  },
+
+  // ✅ ADDED: Update order status for delivery management
+  updateOrderStatus: async (orderId: string, status: string) => {
+    const response = await api.put(`/api/delivery/orders/${orderId}/status`, { status });
+    return response.data;
+  },
+
   // ✅ Create delivery account
   createDeliveryAccount: async (accountData: {
     agencyName: string;
@@ -349,6 +367,37 @@ export const deliveryAPI = {
   // Get delivery history
   getDeliveryHistory: async () => {
     const response = await api.get('/api/delivery/history');
+    return response.data;
+  }
+};
+
+// ========================
+// DELIVERY MANAGEMENT API FUNCTIONS
+// ========================
+
+export const deliveryManagementAPI = {
+  // Get delivery agents for management
+  getDeliveryAgents: async () => {
+    const response = await api.get('/api/delivery/agents');
+    return response.data;
+  },
+
+  // Get orders for delivery management
+  getOrders: async (status?: string) => {
+    const url = status ? `/api/delivery/orders?status=${status}` : '/api/delivery/orders';
+    const response = await api.get(url);
+    return response.data;
+  },
+
+  // Assign order to agent
+  assignOrder: async (orderId: string, agentId: string) => {
+    const response = await api.post('/api/delivery/assign', { orderId, agentId });
+    return response.data;
+  },
+
+  // Update order status
+  updateOrderStatus: async (orderId: string, status: string) => {
+    const response = await api.put(`/api/delivery/orders/${orderId}/status`, { status });
     return response.data;
   }
 };
