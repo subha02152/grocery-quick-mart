@@ -1,19 +1,30 @@
 import { useNavigate } from 'react-router-dom';
 import { ShoppingBag, Users, Package, Truck, MapPin, Wifi } from 'lucide-react';
-import { useEffect } from 'react';
 import { isAuthenticated, getUser } from '../utils/auth';
 
 const Landing = () => {
   const navigate = useNavigate();
 
-  useEffect(() => {
+  // ✅ REMOVED the auto-redirect useEffect that was causing the infinite loop
+  // Users can manually click Login/Register buttons instead
+
+  const handleGetStarted = () => {
     if (isAuthenticated()) {
       const user = getUser();
       if (user) {
-        navigate(`/dashboard/${user.role}`);
+        // Navigate based on role only when user clicks a button
+        if (user.role === 'customer') {
+          navigate('/dashboard/customer');
+        } else if (user.role === 'shop_owner') {
+          navigate('/dashboard/shop_owner');
+        } else if (user.role === 'delivery_agent') {
+          navigate('/delivery');
+        }
       }
+    } else {
+      navigate('/login');
     }
-  }, [navigate]);
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50">
@@ -105,18 +116,29 @@ const Landing = () => {
         </div>
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <button
-            onClick={() => navigate('/login')}
-            className="w-full sm:w-auto px-8 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition shadow-lg"
-          >
-            Login
-          </button>
-          <button
-            onClick={() => navigate('/register')}
-            className="w-full sm:w-auto px-8 py-3 bg-white text-green-600 rounded-lg font-semibold hover:bg-gray-50 transition border-2 border-green-600"
-          >
-            Register
-          </button>
+          {isAuthenticated() ? (
+            <button
+              onClick={handleGetStarted}
+              className="w-full sm:w-auto px-8 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition shadow-lg"
+            >
+              Go to Dashboard
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={() => navigate('/login')}
+                className="w-full sm:w-auto px-8 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition shadow-lg"
+              >
+                Login
+              </button>
+              <button
+                onClick={() => navigate('/register')}
+                className="w-full sm:w-auto px-8 py-3 bg-white text-green-600 rounded-lg font-semibold hover:bg-gray-50 transition border-2 border-green-600"
+              >
+                Register
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

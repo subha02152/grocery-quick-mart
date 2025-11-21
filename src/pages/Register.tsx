@@ -41,13 +41,13 @@ const Register = () => {
         
         toast.success(response.message);
         
-        // ✅ FIXED: Navigate to correct paths based on role
+        // ✅ FIXED: Navigate to correct paths that match App.tsx routes
         if (response.data.user.role === 'customer') {
-          navigate('/customer');
+          navigate('/dashboard/customer');
         } else if (response.data.user.role === 'shop_owner') {
-          navigate('/shop');
+          navigate('/dashboard/shop_owner');
         } else if (response.data.user.role === 'delivery_agent') {
-          navigate('/delivery');  // ✅ This matches your folder structure
+          navigate('/delivery');
         }
       }
     } catch (error: any) {

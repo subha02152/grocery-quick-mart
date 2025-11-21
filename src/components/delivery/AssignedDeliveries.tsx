@@ -29,8 +29,8 @@ const AssignedDeliveries = () => {
       setLoading(true);
       const token = localStorage.getItem('token');
       
-      // Fetch orders assigned to this logged-in delivery agent
-      const response = await fetch('http://localhost:5000/api/delivery/my-orders', {
+      // ✅ CORRECTED: Fetch orders assigned to this delivery agent
+      const response = await fetch('http://localhost:5000/api/delivery/assigned-orders', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -40,10 +40,12 @@ const AssignedDeliveries = () => {
       
       if (data.success) {
         setAssignedOrders(data.data.orders || []);
+      } else {
+        throw new Error(data.message);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching assigned orders:', error);
-      showToast('Failed to load assigned orders', 'error');
+      showToast(error.message || 'Failed to load assigned orders', 'error');
     } finally {
       setLoading(false);
     }
@@ -53,8 +55,18 @@ const AssignedDeliveries = () => {
     try {
       const token = localStorage.getItem('token');
       
-      const response = await fetch(`http://localhost:5000/api/delivery/orders/${orderId}/status`, {
-        method: 'PUT',
+      // ✅ CORRECTED: Use the correct endpoint for delivery agent to update status
+      let endpoint = '';
+      let method = 'PUT';
+      
+      if (newStatus === 'delivered') {
+        endpoint = `http://localhost:5000/api/delivery/orders/${orderId}/deliver`;
+      } else {
+        endpoint = `http://localhost:5000/api/delivery/orders/${orderId}/status`;
+      }
+      
+      const response = await fetch(endpoint, {
+        method: method,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
@@ -68,13 +80,19 @@ const AssignedDeliveries = () => {
         showToast(`Order marked as ${newStatus}`, 'success');
         
         // Update local state
-        setAssignedOrders(prev => 
-          prev.map(order => 
-            order._id === orderId 
-              ? { ...order, status: newStatus } 
-              : order
-          ).filter(order => order.status !== 'delivered') // Remove delivered orders
-        );
+        if (newStatus === 'delivered') {
+          // Remove delivered orders from the list
+          setAssignedOrders(prev => prev.filter(order => order._id !== orderId));
+        } else {
+          // Update status for other orders
+          setAssignedOrders(prev => 
+            prev.map(order => 
+              order._id === orderId 
+                ? { ...order, status: newStatus } 
+                : order
+            )
+          );
+        }
       } else {
         throw new Error(data.message);
       }
@@ -92,7 +110,12 @@ const AssignedDeliveries = () => {
   };
 
   const showToast = (message: string, type: 'success' | 'error') => {
+    // Remove any existing toasts
+    const existingToasts = document.querySelectorAll('[data-toast]');
+    existingToasts.forEach(toast => toast.remove());
+    
     const toast = document.createElement('div');
+    toast.setAttribute('data-toast', 'true');
     toast.className = `fixed top-4 right-4 px-6 py-3 rounded-lg text-white z-50 ${
       type === 'success' ? 'bg-green-500' : 'bg-red-500'
     }`;
@@ -177,6 +200,12 @@ const AssignedDeliveries = () => {
           <Truck className="h-16 w-16 text-gray-300 mx-auto mb-4" />
           <h3 className="text-xl font-semibold text-gray-700 mb-2">No Deliveries Assigned</h3>
           <p className="text-gray-500">Orders assigned to you will appear here</p>
+          <button
+            onClick={refreshData}
+            className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
+          >
+            Check for New Orders
+          </button>
         </div>
       ) : (
         <div className="space-y-4">
@@ -188,7 +217,7 @@ const AssignedDeliveries = () => {
                   <div className="flex items-center space-x-3 mb-2">
                     <span className="font-bold text-gray-900 text-lg">Order #{order.orderNumber}</span>
                     <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(order.status)}`}>
-                      {order.status}
+                      {order.status.toUpperCase()}
                     </span>
                   </div>
                   <p className="text-sm text-gray-600 flex items-center">
@@ -272,7 +301,7 @@ const AssignedDeliveries = () => {
                     className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition font-semibold flex items-center justify-center"
                   >
                     <Truck className="h-4 w-4 mr-2" />
-                    Mark as Dispatched
+                    Start Delivery
                   </button>
                 )}
                 
@@ -292,7 +321,7 @@ const AssignedDeliveries = () => {
                     className="bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition font-semibold flex items-center justify-center"
                   >
                     <XCircle className="h-4 w-4 mr-2" />
-                    Cancel
+                    Cancel Delivery
                   </button>
                 )}
               </div>

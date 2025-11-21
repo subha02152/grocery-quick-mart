@@ -141,8 +141,27 @@ const orderSchema = new mongoose.Schema({
     enum: ['cash', 'card', 'upi', 'wallet'],
     default: 'cash'
   },
-  // ✅ ADDED DELIVERY AGENT FIELD
+  // ✅ ENHANCED DELIVERY FIELDS
   deliveryAgentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  deliveryAgentName: {
+    type: String
+  },
+  deliveryAgentPhone: {
+    type: String
+  },
+  deliveryAgentVehicle: {
+    type: String
+  },
+  dispatchedAt: {
+    type: Date
+  },
+  deliveredAt: {
+    type: Date
+  },
+  assignedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   }
@@ -1108,6 +1127,13 @@ app.get('/api/orders', protect, authorizeRoles('shop_owner'), async (req, res) =
       status: order.status,
       paymentStatus: order.paymentStatus,
       paymentMethod: order.paymentMethod,
+      // ✅ ADD DELIVERY AGENT INFO
+      deliveryAgentId: order.deliveryAgentId?.toString(),
+      deliveryAgentName: order.deliveryAgentName,
+      deliveryAgentPhone: order.deliveryAgentPhone,
+      deliveryAgentVehicle: order.deliveryAgentVehicle,
+      dispatchedAt: order.dispatchedAt,
+      deliveredAt: order.deliveredAt,
       createdAt: order.createdAt.toISOString(),
       updatedAt: order.updatedAt.toISOString()
     }));
@@ -1299,6 +1325,71 @@ app.get('/api/delivery/agents', protect, async (req, res) => {
   }
 });
 
+// ✅ ENHANCED: ASSIGN ORDER TO DELIVERY AGENT (WITH AGENT DETAILS)
+app.post('/api/delivery/assign', protect, async (req, res) => {
+  try {
+    const { orderId, agentId } = req.body;
+    console.log(`📦 Assigning order ${orderId} to agent ${agentId}`);
+
+    // Validate
+    if (!orderId || !agentId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Order ID and Agent ID are required'
+      });
+    }
+
+    // Get delivery agent details
+    const agent = await User.findById(agentId);
+    if (!agent) {
+      return res.status(404).json({
+        success: false,
+        message: 'Delivery agent not found'
+      });
+    }
+
+    // Get shop details
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    // Update order with delivery agent details
+    const updatedOrder = await Order.findByIdAndUpdate(
+      orderId,
+      { 
+        status: 'dispatched',
+        deliveryAgentId: agentId,
+        deliveryAgentName: agent.name, // ✅ ADD AGENT NAME
+        deliveryAgentPhone: agent.phone, // ✅ ADD AGENT PHONE
+        deliveryAgentVehicle: agent.vehicleType, // ✅ ADD AGENT VEHICLE
+        assignedBy: req.user.id, // ✅ ADD WHO ASSIGNED
+        dispatchedAt: new Date(),
+        updatedAt: new Date()
+      },
+      { new: true }
+    ).populate('shopId', 'name address phone')
+     .populate('customerId', 'name phone email');
+
+    console.log(`✅ Order ${updatedOrder.orderNumber} assigned to agent ${agent.name}`);
+
+    res.status(200).json({
+      success: true,
+      message: `Order assigned to ${agent.name} successfully!`,
+      data: { order: updatedOrder }
+    });
+  } catch (error) {
+    console.error('❌ Assign order error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error assigning order'
+    });
+  }
+});
+
 // ✅ GET ORDERS WITH STATUS FILTER (For Delivery Management)
 app.get('/api/delivery/orders', protect, async (req, res) => {
   try {
@@ -1336,7 +1427,9 @@ app.get('/api/delivery/orders', protect, async (req, res) => {
         price: item.price
       })),
       createdAt: order.createdAt.toISOString(),
-      deliveryAgentId: order.deliveryAgentId?.toString() || null
+      deliveryAgentId: order.deliveryAgentId?.toString() || null,
+      deliveryAgentName: order.deliveryAgentName,
+      deliveryAgentPhone: order.deliveryAgentPhone
     }));
 
     res.status(200).json({
@@ -1350,54 +1443,6 @@ app.get('/api/delivery/orders', protect, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error fetching orders for delivery management'
-    });
-  }
-});
-
-// ✅ ASSIGN ORDER TO DELIVERY AGENT
-app.post('/api/delivery/assign', protect, async (req, res) => {
-  try {
-    const { orderId, agentId } = req.body;
-    console.log(`📦 Assigning order ${orderId} to agent ${agentId}`);
-
-    // Validate
-    if (!orderId || !agentId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Order ID and Agent ID are required'
-      });
-    }
-
-    // Update order
-    const order = await Order.findByIdAndUpdate(
-      orderId,
-      { 
-        status: 'dispatched',
-        deliveryAgentId: agentId,
-        updatedAt: new Date()
-      },
-      { new: true }
-    );
-
-    if (!order) {
-      return res.status(404).json({
-        success: false,
-        message: 'Order not found'
-      });
-    }
-
-    console.log(`✅ Order ${order.orderNumber} assigned to agent ${agentId}`);
-
-    res.status(200).json({
-      success: true,
-      message: 'Order assigned successfully!',
-      data: { order }
-    });
-  } catch (error) {
-    console.error('❌ Assign order error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error assigning order'
     });
   }
 });

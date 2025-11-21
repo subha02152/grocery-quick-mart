@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react';
-import { Package, Clock } from 'lucide-react';
+import { Package, Clock, Truck, User, Phone } from 'lucide-react';
 import { Order, Shop } from '../../types';
 import { toast } from '../../utils/toast';
-import { orderAPI, shopAPI } from '../../utils/api'; // ✅ Import both APIs
+import { orderAPI, shopAPI, deliveryAPI } from '../../utils/api';
 
 const ShopOrders = () => {
   const [shop, setShop] = useState<Shop | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [deliveryAgents, setDeliveryAgents] = useState<any[]>([]);
+  const [assigning, setAssigning] = useState(false);
 
   useEffect(() => {
     fetchShopAndOrders();
@@ -17,10 +20,9 @@ const ShopOrders = () => {
     try {
       setLoading(true);
       
-      // ✅ FIXED: Use shopAPI for shop details, orderAPI for orders
       const [shopResponse, ordersResponse] = await Promise.all([
-        shopAPI.getShop(),     // ✅ CORRECT - get shop details from shopAPI
-        orderAPI.getOrders()   // ✅ CORRECT - get orders for this shop from orderAPI
+        shopAPI.getShop(),
+        orderAPI.getOrders()
       ]);
 
       if (shopResponse.success) {
@@ -38,18 +40,49 @@ const ShopOrders = () => {
     }
   };
 
-  const updateOrderStatus = async (orderId: string, status: Order['status']) => {
+  // Fetch delivery agents for assignment
+  const fetchDeliveryAgents = async () => {
     try {
-      const response = await orderAPI.updateOrderStatus(orderId, status);
+      const response = await deliveryAPI.getDeliveryAgents();
       if (response.success) {
-        setOrders(orders.map(order => 
-          order.id === orderId ? { ...order, status, updatedAt: new Date().toISOString() } : order
-        ));
-        toast.success(`Order marked as ${status}`);
+        setDeliveryAgents(response.data.agents || []);
+      }
+    } catch (error) {
+      console.error('Error fetching delivery agents:', error);
+      toast.error('Failed to load delivery agents');
+    }
+  };
+
+  // Open assignment modal
+  const openAssignmentModal = async (order: Order) => {
+    setSelectedOrder(order);
+    await fetchDeliveryAgents();
+  };
+
+  // Assign order to delivery agent
+  const assignOrderToAgent = async (agentId: string) => {
+    if (!selectedOrder) return;
+    
+    try {
+      setAssigning(true);
+      
+      const response = await deliveryAPI.assignOrderToAgent(selectedOrder.id, agentId);
+      if (response.success) {
+        toast.success('Order assigned to delivery agent successfully!');
+        
+        // Refresh orders to get updated data from MongoDB
+        await fetchShopAndOrders();
+        
+        setSelectedOrder(null);
+        setDeliveryAgents([]);
+      } else {
+        throw new Error(response.message);
       }
     } catch (error: any) {
-      const message = error.response?.data?.message || 'Error updating order status';
-      toast.error(message);
+      console.error('Error assigning order:', error);
+      toast.error(error.message || 'Failed to assign order');
+    } finally {
+      setAssigning(false);
     }
   };
 
@@ -68,6 +101,10 @@ const ShopOrders = () => {
       default:
         return 'bg-yellow-100 text-yellow-800';
     }
+  };
+
+  const getAvailableAgents = () => {
+    return deliveryAgents.filter(agent => agent.isAvailable);
   };
 
   if (!shop) {
@@ -179,53 +216,101 @@ const ShopOrders = () => {
                 <span className="font-medium">Contact:</span>{' '}
                 {order.customerPhone}
               </p>
+              
+              {/* ✅ SHOW DELIVERY AGENT IF ASSIGNED */}
+              {order.deliveryAgentName && (
+                <div className="mt-2 p-2 bg-blue-50 rounded-lg">
+                  <p className="font-medium text-blue-800 flex items-center">
+                    <User className="h-4 w-4 mr-1" />
+                    Delivery Agent: {order.deliveryAgentName}
+                  </p>
+                  {order.deliveryAgentPhone && (
+                    <p className="text-blue-700 flex items-center">
+                      <Phone className="h-3 w-3 mr-1" />
+                      {order.deliveryAgentPhone}
+                    </p>
+                  )}
+                  {order.deliveryAgentVehicle && (
+                    <p className="text-blue-700 text-sm">
+                      Vehicle: {order.deliveryAgentVehicle}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              {order.status === 'pending' && (
-                <>
-                  <button
-                    onClick={() => updateOrderStatus(order.id, 'confirmed')}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm"
-                  >
-                    Confirm
-                  </button>
-                  <button
-                    onClick={() => updateOrderStatus(order.id, 'cancelled')}
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm"
-                  >
-                    Cancel
-                  </button>
-                </>
-              )}
-              {order.status === 'confirmed' && (
+            {/* ✅ FIXED: NOW SHOWS ASSIGN BUTTON FOR PENDING ORDERS TOO */}
+            {(order.status === 'pending' || order.status === 'confirmed' || order.status === 'packed') && !order.deliveryAgentId && (
+              <div className="flex flex-wrap gap-2">
                 <button
-                  onClick={() => updateOrderStatus(order.id, 'packed')}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition text-sm"
+                  onClick={() => openAssignmentModal(order)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm flex items-center"
                 >
-                  Mark as Packed
+                  <Truck className="h-4 w-4 mr-1" />
+                  Assign Delivery Agent
                 </button>
-              )}
-              {order.status === 'packed' && (
-                <button
-                  onClick={() => updateOrderStatus(order.id, 'dispatched')}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
-                >
-                  Mark as Dispatched
-                </button>
-              )}
-              {order.status === 'dispatched' && (
-                <button
-                  onClick={() => updateOrderStatus(order.id, 'delivered')}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm"
-                >
-                  Mark as Delivered
-                </button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         ))}
       </div>
+
+      {/* Assignment Modal */}
+      {selectedOrder && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-semibold mb-4">Assign Delivery Agent</h3>
+            <p className="text-gray-600 mb-4">
+              Assign Order #{selectedOrder.orderNumber} to a delivery agent
+            </p>
+            
+            {getAvailableAgents().length === 0 ? ( 
+              <div className="text-center py-4 text-gray-500">
+                <Truck className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+                <p>No available delivery agents</p>
+                <button 
+                  onClick={fetchDeliveryAgents}
+                  className="text-blue-600 hover:text-blue-700 mt-2"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3 mb-6">
+                {getAvailableAgents().map((agent) => (
+                  <div
+                    key={agent.id}
+                    className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50"
+                  >
+                    <div>
+                      <p className="font-medium">{agent.name}</p>
+                      <p className="text-sm text-gray-600">{agent.vehicleType} • {agent.phone}</p>
+                    </div>
+                    <button
+                      onClick={() => assignOrderToAgent(agent.id)}
+                      disabled={assigning}
+                      className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 text-sm"
+                    >
+                      {assigning ? 'Assigning...' : 'Assign'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button
+              onClick={() => {
+                setSelectedOrder(null);
+                setDeliveryAgents([]);
+              }}
+              disabled={assigning}
+              className="w-full bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300 transition disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
